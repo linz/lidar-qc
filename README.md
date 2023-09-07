@@ -19,6 +19,9 @@ Install the application:
 pip install --editable .
 ```
 
+## License
+This repository is licensed under the MIT license. For more information see the [license file](./LICENSE).
+
 ## Usage
 The application is called using linz-lidar-qc. Use `--help` for more information on the application.
 
