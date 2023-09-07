@@ -1,0 +1,22 @@
+name: lidar-qc
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3
+  - gdal
+  - rasterio
+  - lastools
+  - fiona
+  - shapely
+  - pyproj
+  - rtree
+  - requests
+  - tqdm
+  - pdal
+  - python-pdal
+  - filetype
+  - click
+  - typer
+  - pdfcombine
+  - pydantic
