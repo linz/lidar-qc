@@ -64,7 +64,12 @@ def density_raster(
             results, errors = run_in_parallel(
                 func=create_raster_per_tile_pdal,
                 items=las_files_list,
-                extra_kwargs={"output_dir": subfolder, "where_statement": DENSITY_FILTER_WHERE_STATEMENTS[filter_], "dimension": "Intensity", "output_type": "stdev"},
+                extra_kwargs={
+                    "output_dir": subfolder,
+                    "where_statement": DENSITY_FILTER_WHERE_STATEMENTS[filter_],
+                    "dimension": "Intensity",
+                    "output_type": "min",
+                },
                 start_message=start_message,
                 pbar_unit=pbar_unit,
             )
@@ -72,7 +77,12 @@ def density_raster(
             results, errors = run_in_parallel(
                 func=create_raster_per_tile_pdal,
                 items=las_files_list,
-                extra_kwargs={"output_dir": subfolder, "where_statement": DENSITY_FILTER_WHERE_STATEMENTS[filter_], "dimension": "Z", "output_type": "count"},
+                extra_kwargs={
+                    "output_dir": subfolder,
+                    "where_statement": DENSITY_FILTER_WHERE_STATEMENTS[filter_],
+                    "dimension": "Z",
+                    "output_type": "count",
+                },
                 start_message=start_message,
                 pbar_unit=pbar_unit,
             )
@@ -87,8 +97,9 @@ def density_raster(
         else:
             build_vrt(input_dir=[subfolder], verbose=verbose, log_file=log_file, logger_=logger, called_from_cli=False)
             vrt_style_file = Path(__file__).parents[2] / f"layer_styles/{filter_.value}_raster.qml"
-            vrt_folder = subfolder / "vrt"
-            shutil.copy(vrt_style_file, vrt_folder)
+            if vrt_style_file.exists():
+                vrt_folder = subfolder / "vrt"
+                shutil.copy(vrt_style_file, vrt_folder)
     end_timer(start_time)
 
     """

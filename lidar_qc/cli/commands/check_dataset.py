@@ -67,7 +67,7 @@ def check_dataset(
         " Can pass multiple times to process multiple point cloud directories, i.e. multiple types of point cloud.",
     ),
     build_vrts: bool = typer.Option(False, help="Build Virtual Rasters for raster products."),
-    no_lasinfo_txt: bool = typer.Option(False, "--no-otxt", help="Write lasinfo output to text files."),
+    no_lasinfo_txt: bool = typer.Option(False, "--no-otxt", help="Do not save lasinfo output to text files."),
     _500_tile_index: Optional[List[Path]] = typer.Option(
         None,
         file_okay=True,

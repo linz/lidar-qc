@@ -44,6 +44,7 @@ class DensityFilter(str, Enum):
     all_veg = "all_veg"
     medium_veg = "medium_veg"
     intensity = "intensity"
+    bridge = "bridge"
 
 
 DENSITY_FILTER_COMMON: list[DensityFilter] = [
@@ -52,7 +53,7 @@ DENSITY_FILTER_COMMON: list[DensityFilter] = [
     DensityFilter.low_veg,
     DensityFilter.buildings,
     DensityFilter.unclassified,
-    DensityFilter.noise
+    DensityFilter.noise,
 ]
 DENSITY_FILTER_COMMON_NO_FLAG: list[DensityFilter] = [
     DensityFilter.ground_no_flag,
@@ -80,10 +81,13 @@ DENSITY_FILTER_WHERE_STATEMENTS: dict[DensityFilter, str] = {
     DensityFilter.all_veg: "(Classification == 3 || Classification == 4 || Classification == 5)",
     DensityFilter.medium_veg: "(Classification == 4)",
     DensityFilter.intensity: "(ClassFlags == 0 || ClassFlags == 4 || ClassFlags == 8)",
+    DensityFilter.bridge: "(Classification == 17 && ClassFlags == 0)",
 }
 
 
-def create_raster_per_tile_pdal(input_file: Path, output_dir: Path, where_statement: str, dimension: str, output_type: str) -> None:
+def create_raster_per_tile_pdal(
+    input_file: Path, output_dir: Path, where_statement: str, dimension: str, output_type: str
+) -> None:
     """
     Process to create the density raster tiles with PDAL pipeline.
     Output file is a tif grid with resolution of 1, where each cell is populated by the count of corresponding points.
