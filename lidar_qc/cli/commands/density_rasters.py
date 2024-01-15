@@ -44,16 +44,29 @@ def density_raster(
     """
     logger = configure_logging(verbose, log_file)
     start_time = start_timer()
-    las_files_list = list(input_dir.glob("*.la[sz]"))
     for filter_ in density_filter:
         subfolder = Path(input_dir / f"{filter_.value}_raster")
-        subfolder.mkdir(exist_ok=True, parents=True)
+        if subfolder.exists() == False:
+            subfolder.mkdir(exist_ok=True, parents=True)
+            files = list(input_dir.glob("*.la[sz]"))
+        else:
+            if Path(subfolder / "vrt").exists():
+                logger.info(f"vrt folder found, skipping {filter_.value} processing")
+                continue
+            else:
+                raster_files = {f.stem for f in (subfolder.glob("*.tif"))}
+                las_files = {f.stem: f.suffix for f in (input_dir.glob("*.la[sz]"))}
+                las_files_filtered = list(set(las_files.keys()) - raster_files)
+                logger.info(
+                    f"{len(raster_files)} raster files found in {subfolder}, processing {len(las_files_filtered)}/{len(las_files.keys())} point cloud files."
+                )
+                files = [Path(str(input_dir / f) + str(las_files[f])) for f in las_files_filtered]
         start_message = f"Creating {filter_.value} density rasters now..."
         pbar_unit = "tile"
         if filter_ == DensityFilter.pulse:
             results, errors = run_in_parallel(
                 func=create_raster_per_tile_lastools,
-                items=las_files_list,
+                items=files,
                 extra_kwargs={
                     "output_dir": subfolder,
                 },
@@ -63,7 +76,7 @@ def density_raster(
         elif filter_ == DensityFilter.intensity:
             results, errors = run_in_parallel(
                 func=create_raster_per_tile_pdal,
-                items=las_files_list,
+                items=files,
                 extra_kwargs={
                     "output_dir": subfolder,
                     "where_statement": DENSITY_FILTER_WHERE_STATEMENTS[filter_],
@@ -76,7 +89,7 @@ def density_raster(
         else:
             results, errors = run_in_parallel(
                 func=create_raster_per_tile_pdal,
-                items=las_files_list,
+                items=files,
                 extra_kwargs={
                     "output_dir": subfolder,
                     "where_statement": DENSITY_FILTER_WHERE_STATEMENTS[filter_],
