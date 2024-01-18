@@ -1,11 +1,11 @@
 from pathlib import Path
-from typing import Annotated, Generator, List, Optional
+from typing import List, Optional
 
 import typer
 
 from lidar_qc.cli.commands.build_vrt import build_vrt
 from lidar_qc.cli.timer import end_timer, start_timer
-from lidar_qc.cli.validations import validate_filter_args
+from lidar_qc.cli.validations import validate_raster_files
 from lidar_qc.log import configure_logging
 from lidar_qc.neighbours import create_raster_per_tile
 from lidar_qc.parallel import run_in_parallel, write_errors_csv
@@ -23,13 +23,16 @@ def build_neighbours(
         readable=True,
         resolve_path=True,
         help="Path to Raster Directory, files can be only tif format.",
-        callback=validate_filter_args,
+        # callback=validate_raster_files,
     ),
     verbose: bool = False,
     log_file: Optional[Path] = typer.Option(
         default=None,
     ),
 ) -> None:
+    """
+    Creates neighbour rasters for a collection of DEM or DSM files, to aid in finding spikes and dips.
+    """
     logger = configure_logging(verbose, log_file)
     start_time = start_timer()
     for folder in input_dir:

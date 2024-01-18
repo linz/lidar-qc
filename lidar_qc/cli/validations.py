@@ -45,6 +45,12 @@ def validate_input_las_dir(folder: Path) -> Path:
     return folder
 
 
+def validate_raster_files(folder: Path) -> Path:
+    if len(list(folder.glob("*.tif"))) == 0:
+        raise typer.BadParameter("Input directory does not contain tif files")
+    return folder
+
+
 def validate_attribute_field(layer: Path, attribute: str) -> bool:
     with fiona.open(layer, "r") as c:
         if schema := c.schema:
