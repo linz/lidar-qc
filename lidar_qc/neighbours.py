@@ -24,7 +24,7 @@ def create_raster_per_tile(file: Path, output_dir: Path) -> None:
     src_band1 = src.read(1)
     process_arr = ndimage.generic_filter(input=src_band1, function=calculate_focal_range, footprint=np.ones((3, 3)))
     with rasterio.open(
-        f"{output_dir / file.stem}_neighbour.tif",
+        f"{output_dir / file.name}",
         "w",
         driver="GTiff",
         width=src_band1.shape[1],

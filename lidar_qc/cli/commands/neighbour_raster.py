@@ -5,13 +5,13 @@ import typer
 
 from lidar_qc.cli.commands.build_vrt import build_vrt
 from lidar_qc.cli.timer import end_timer, start_timer
-from lidar_qc.cli.validations import validate_raster_files
+from lidar_qc.cli.validations import validate_raster_files, validate_script_progress
 from lidar_qc.log import configure_logging
 from lidar_qc.neighbours import create_raster_per_tile
 from lidar_qc.parallel import run_in_parallel, write_errors_csv
 
 
-def build_neighbours(
+def neighbour_raster(
     input_dir: List[Path] = typer.Option(
         [],
         "--input",
@@ -36,23 +36,13 @@ def build_neighbours(
     logger = configure_logging(verbose, log_file)
     start_time = start_timer()
     for folder in input_dir:
-        subfolder = Path(folder / f"{folder.stem}_raster")
-        if subfolder.exists() == False:
-            subfolder.mkdir(exist_ok=True, parents=True)
-            files = list(folder.glob("*.tif"))
-        else:
-            if Path(subfolder / "vrt").exists():
-                logger.info(f"vrt folder found, skipping {folder.stem} processing")
-                continue
-            else:
-                subfolder_files = {f.name for f in (subfolder.glob("*.tif"))}
-                folder_files = {f.name for f in (folder.glob("*.tif"))}
-                folder_files_filtered = list(folder_files - subfolder_files)
-                logger.info(
-                    f"{len(subfolder_files)} raster files found in {subfolder}, processing {len(folder_files_filtered)}/{len(folder_files)} raster files."
-                )
-                files = [subfolder / f for f in folder_files_filtered]
-        start_message = f"Creating neighbors raster now for {folder}..."
+        subfolder = Path(folder / f"{folder.stem}_neighbour")
+        files: list[Path] | None = validate_script_progress(
+            folder=folder, subfolder=subfolder, item=folder.stem, ext_folder="*.tif", ext_subfolder="*.tif"
+        )
+        if files == None:
+            continue
+        start_message = f"Creating neighbors raster now for {folder.name}..."
         pbar_unit = "tile"
         results, errors = run_in_parallel(
             func=create_raster_per_tile,

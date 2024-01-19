@@ -143,3 +143,10 @@ def create_raster_per_tile_lastools(input_file: Path, output_dir: Path) -> None:
     result = subprocess.run(args=args, capture_output=True, shell=True, encoding="utf-8", check=True)
     if result.stderr and not result.stderr.startswith('Please note that LAStools is not "free"'):
         raise RuntimeError(f"Subprocess Error: {result.stderr}")
+
+
+def remove_gross_files(folder: Path) -> None:
+    for file in list(folder.glob("*.tfw")):
+        file.unlink()
+    for file in list(folder.glob("*.kml")):
+        file.unlink()

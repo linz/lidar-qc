@@ -6,12 +6,13 @@ import typer
 
 from lidar_qc.cli.commands.build_vrt import build_vrt
 from lidar_qc.cli.timer import end_timer, start_timer
-from lidar_qc.cli.validations import validate_filter_args
+from lidar_qc.cli.validations import validate_filter_args, validate_script_progress
 from lidar_qc.density_filters import (
     DENSITY_FILTER_WHERE_STATEMENTS,
     DensityFilter,
     create_raster_per_tile_lastools,
     create_raster_per_tile_pdal,
+    remove_gross_files,
 )
 from lidar_qc.log import configure_logging
 from lidar_qc.parallel import run_in_parallel, write_errors_csv
@@ -46,21 +47,11 @@ def density_raster(
     start_time = start_timer()
     for filter_ in density_filter:
         subfolder = Path(input_dir / f"{filter_.value}_raster")
-        if subfolder.exists() == False:
-            subfolder.mkdir(exist_ok=True, parents=True)
-            files = list(input_dir.glob("*.la[sz]"))
-        else:
-            if Path(subfolder / "vrt").exists():
-                logger.info(f"vrt folder found, skipping {filter_.value} processing")
-                continue
-            else:
-                raster_files = {f.stem for f in (subfolder.glob("*.tif"))}
-                las_files = {f.stem: f.suffix for f in (input_dir.glob("*.la[sz]"))}
-                las_files_filtered = list(set(las_files.keys()) - raster_files)
-                logger.info(
-                    f"{len(raster_files)} raster files found in {subfolder}, processing {len(las_files_filtered)}/{len(las_files.keys())} point cloud files."
-                )
-                files = [Path(str(input_dir / f) + str(las_files[f])) for f in las_files_filtered]
+        files: list[Path] | None = validate_script_progress(
+            folder=input_dir, subfolder=subfolder, item=filter_.value, ext_folder="*.la[sz]", ext_subfolder="*.tif"
+        )
+        if files == None:
+            continue
         start_message = f"Creating {filter_.value} density rasters now..."
         pbar_unit = "tile"
         if filter_ == DensityFilter.pulse:
@@ -73,6 +64,7 @@ def density_raster(
                 start_message=start_message,
                 pbar_unit=pbar_unit,
             )
+            remove_gross_files(subfolder)
         elif filter_ == DensityFilter.intensity:
             results, errors = run_in_parallel(
                 func=create_raster_per_tile_pdal,

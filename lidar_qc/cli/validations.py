@@ -1,6 +1,7 @@
 import os
 from pathlib import Path
-from typing import Any, List, Tuple, Type, Union
+from re import sub
+from typing import Any, Iterable, List, Tuple, Type, Union
 
 import fiona
 import typer
@@ -12,8 +13,11 @@ from lidar_qc.density_filters import (
     DENSITY_FILTER_COMMON_NO_FLAG,
     DensityFilter,
 )
+from lidar_qc.log import get_logger
 from lidar_qc.parallel import FatalError
 from lidar_qc.util import is_point_cloud_dir, is_raster_dir
+
+logger = get_logger()
 
 
 def validate_file_parent(value: Path) -> Path:
@@ -114,3 +118,38 @@ def find_data_subdirs(
                 if is_point_cloud_dir(child.name):
                     raw_data_dirs.append((child, PointCloudFileInfo))
     return raw_data_dirs
+
+
+def remove_invalid_files(files: set, folder: Path):
+    files_filtered = files.copy()
+    for file in files:
+        filepath: Path = Path(str(folder / Path(file)) + ".tif")
+        if filepath.stat().st_size > 0:
+            if not Path(str(folder / Path(file)) + ".tfw").exists():
+                filepath.unlink()
+                files_filtered.remove(file)
+        elif filepath.stat().st_size == 0:
+            filepath.unlink()
+            files_filtered.remove(file)
+    return files_filtered
+
+
+def validate_script_progress(
+    folder: Path, subfolder: Path, item: str, ext_folder: str, ext_subfolder: str
+) -> list[Path] | None:
+    if subfolder.exists() == False:
+        subfolder.mkdir(exist_ok=True, parents=True)
+        return list(folder.glob(ext_folder))
+    else:
+        if Path(subfolder / "vrt").exists():
+            logger.info(f"vrt folder found, skipping {item} processing")
+        else:
+            folder_files: dict[str, str] = {f.stem: f.suffix for f in (folder.glob(ext_folder))}
+            subfolder_files: set[str] = {f.stem for f in (subfolder.glob(ext_subfolder))}
+            if item == DensityFilter.pulse.value:
+                subfolder_files = remove_invalid_files(files=subfolder_files, folder=subfolder)
+            folder_files_filtered = list(set(folder_files.keys()) - subfolder_files)
+            logger.info(
+                f"{len(subfolder_files)} raster files found in {subfolder}, processing {len(folder_files_filtered)}/{len(folder_files.keys())} files in {folder}"
+            )
+            return [Path(str(folder / f) + str(folder_files[f])) for f in folder_files_filtered]
