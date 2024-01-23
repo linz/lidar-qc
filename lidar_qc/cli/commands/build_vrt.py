@@ -5,6 +5,7 @@ from typing import Annotated, List, Optional
 import typer
 
 from lidar_qc.cli.timer import end_timer, start_timer
+from lidar_qc.cli.validations import validate_raster_folders
 from lidar_qc.log import configure_logging
 from lidar_qc.vrt import (
     child_vrt_filepaths,
@@ -27,6 +28,7 @@ def build_vrt(
         resolve_path=True,
         help="File path to raster directory for files used to create vrt."
         " Can pass multiple times to process multiple raster directories, i.e. DEM and DSM.",
+        callback=validate_raster_folders,
     ),
     stats: bool = False,
     verbose: bool = False,

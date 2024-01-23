@@ -21,6 +21,9 @@ logger = get_logger()
 
 
 def validate_file_parent(value: Path) -> Path:
+    """
+    Raise error if file is not in a writable folder that exists.
+    """
     if not value.parent.exists() or not value.parent.is_dir():
         raise typer.BadParameter("File must be in a folder that exists")
     if not os.access(value.parent, os.W_OK):
@@ -29,6 +32,9 @@ def validate_file_parent(value: Path) -> Path:
 
 
 def validate_output_gpkg(value: Path) -> Path:
+    """
+    Raise error if file suffix is not ".gpkg".
+    """
     if value.suffix != ".gpkg":
         raise typer.BadParameter("File must end in .gpkg")
     validate_file_parent(value)
@@ -36,6 +42,9 @@ def validate_output_gpkg(value: Path) -> Path:
 
 
 def validate_geospatial_format(value: Path) -> Union[Path, None]:
+    """
+    Raise error if file suffix is not ".gpkg" or ".shp".
+    """
     if value:
         if value.suffix != ".gpkg" and value.suffix != ".shp":
             raise typer.BadParameter("File must end in .gpkg or .shp")
@@ -44,18 +53,37 @@ def validate_geospatial_format(value: Path) -> Union[Path, None]:
 
 
 def validate_input_las_dir(folder: Path) -> Path:
+    """
+    Raise error if folder does not contain ".las" or ".laz" files.
+    """
     if len(list(folder.glob("*.la[sz]"))) == 0:
         raise typer.BadParameter("Input directory does not contain LAS or LAZ files")
     return folder
 
 
-def validate_raster_files(folder: Path) -> Path:
+def validate_raster_folders(folders: list[Path]) -> list[Path]:
+    """
+    Raise error if any folder within the list of raster folders does not contain ".tif" files.
+    """
+    for folder in folders:
+        if len(list(folder.glob("*.tif"))) == 0:
+            raise typer.BadParameter(f"Input directory {folder.name} does not contain tif files")
+    return folders
+
+
+def validate_raster_folder(folder: Path) -> Path:
+    """
+    Raise error if folder does not contain ".tif" files.
+    """
     if len(list(folder.glob("*.tif"))) == 0:
-        raise typer.BadParameter("Input directory does not contain tif files")
+        raise typer.BadParameter(f"Input directory {folder.name} does not contain tif files")
     return folder
 
 
 def validate_attribute_field(layer: Path, attribute: str) -> bool:
+    """
+    Return True if attribute is in layer schema, False if it's not.
+    """
     with fiona.open(layer, "r") as c:
         if schema := c.schema:
             if attribute in list((schema)["properties"].keys()):

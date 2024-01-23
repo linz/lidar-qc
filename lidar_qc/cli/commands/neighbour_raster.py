@@ -23,7 +23,7 @@ def neighbour_raster(
         readable=True,
         resolve_path=True,
         help="Path to Raster Directory, files can be only tif format.",
-        # callback=validate_raster_files,
+        callback=validate_raster_folders,
     ),
     verbose: bool = False,
     log_file: Optional[Path] = typer.Option(
