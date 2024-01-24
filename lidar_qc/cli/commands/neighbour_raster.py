@@ -3,11 +3,11 @@ from typing import List, Optional
 
 import typer
 
+from lidar_qc.array_calculations import create_neighbour_from_tile
 from lidar_qc.cli.commands.build_vrt import build_vrt
 from lidar_qc.cli.timer import end_timer, start_timer
-from lidar_qc.cli.validations import validate_raster_files, validate_script_progress
+from lidar_qc.cli.validations import validate_raster_folders, validate_script_progress
 from lidar_qc.log import configure_logging
-from lidar_qc.neighbours import create_raster_per_tile
 from lidar_qc.parallel import run_in_parallel, write_errors_csv
 
 
@@ -36,16 +36,16 @@ def neighbour_raster(
     logger = configure_logging(verbose, log_file)
     start_time = start_timer()
     for folder in input_dir:
-        subfolder = Path(folder / f"{folder.stem}_neighbour")
+        subfolder = Path(folder / f"neighbour_raster")
         files: list[Path] | None = validate_script_progress(
-            folder=folder, subfolder=subfolder, item=folder.stem, ext_folder="*.tif", ext_subfolder="*.tif"
+            input_files=list(folder.glob("*.tif")), output_dir=subfolder, item=folder.stem
         )
-        if files == None:
+        if not files:
             continue
         start_message = f"Creating neighbors raster now for {folder.name}..."
         pbar_unit = "tile"
         results, errors = run_in_parallel(
-            func=create_raster_per_tile,
+            func=create_neighbour_from_tile,
             items=files,
             extra_kwargs={
                 "output_dir": subfolder,

@@ -48,9 +48,9 @@ def density_raster(
     for filter_ in density_filter:
         subfolder = Path(input_dir / f"{filter_.value}_raster")
         files: list[Path] | None = validate_script_progress(
-            folder=input_dir, subfolder=subfolder, item=filter_.value, ext_folder="*.la[sz]", ext_subfolder="*.tif"
+            input_files=list(input_dir.glob("*.la[sz]")), output_dir=subfolder, item=filter_.value
         )
-        if files == None:
+        if not files:
             continue
         start_message = f"Creating {filter_.value} density rasters now..."
         pbar_unit = "tile"

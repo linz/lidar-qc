@@ -148,36 +148,47 @@ def find_data_subdirs(
     return raw_data_dirs
 
 
-def remove_invalid_files(files: set, folder: Path):
-    files_filtered = files.copy()
+def remove_invalid_files(files: Iterable[Path]) -> list[Path]:
+    """
+    Receives list of files to iterate through.
+    If files have been processed correctly, add file path to new list.
+    If files have been partially processed, delete files.
+    Returns: List of files that have been processed correctly.
+    """
+    valid_files: list[Path] = []
     for file in files:
-        filepath: Path = Path(str(folder / Path(file)) + ".tif")
-        if filepath.stat().st_size > 0:
-            if not Path(str(folder / Path(file)) + ".tfw").exists():
-                filepath.unlink()
-                files_filtered.remove(file)
-        elif filepath.stat().st_size == 0:
-            filepath.unlink()
-            files_filtered.remove(file)
-    return files_filtered
+        if file.stat().st_size > 0:
+            if not file.with_suffix(".tfw").exists():
+                file.unlink()
+            else:
+                valid_files.append(file)
+        elif file.stat().st_size == 0:
+            file.unlink()
+    return valid_files
 
 
-def validate_script_progress(
-    folder: Path, subfolder: Path, item: str, ext_folder: str, ext_subfolder: str
-) -> list[Path] | None:
-    if subfolder.exists() == False:
-        subfolder.mkdir(exist_ok=True, parents=True)
-        return list(folder.glob(ext_folder))
-    else:
-        if Path(subfolder / "vrt").exists():
-            logger.info(f"vrt folder found, skipping {item} processing")
-        else:
-            folder_files: dict[str, str] = {f.stem: f.suffix for f in (folder.glob(ext_folder))}
-            subfolder_files: set[str] = {f.stem for f in (subfolder.glob(ext_subfolder))}
-            if item == DensityFilter.pulse.value:
-                subfolder_files = remove_invalid_files(files=subfolder_files, folder=subfolder)
-            folder_files_filtered = list(set(folder_files.keys()) - subfolder_files)
-            logger.info(
-                f"{len(subfolder_files)} raster files found in {subfolder}, processing {len(folder_files_filtered)}/{len(folder_files.keys())} files in {folder}"
-            )
-            return [Path(str(folder / f) + str(folder_files[f])) for f in folder_files_filtered]
+def validate_script_progress(input_files: list[Path], output_dir: Path, item: str) -> list[Path]:
+    """
+    Receives list of input files, output directory path, and an item to indicate what is being processed.
+    Code will look in subfolder to work out where its up to in the process:
+        - has the subfolder been created? If not, at the start of the process.
+          Return input file list.
+        - subfolder exists, does the vrt folder exist? If it does, then all files have been processed.
+          Return an empty list.
+        - subfolder exists but vrt folder doesnt exist, therefore processing was stopped mid-way through.
+          Return a filtered list of files still to be processed.
+    """
+    if not output_dir.exists():
+        output_dir.mkdir(exist_ok=True)
+        return input_files
+    if Path(output_dir / "vrt").exists():
+        logger.info(f"vrt folder found, skipping {item} processing")
+        return []
+    output_files = list(output_dir.glob("*.tif"))
+    if item == DensityFilter.pulse.value:
+        output_files: list[Path] = remove_invalid_files(files=output_files)
+    folder_files_filtered: list[Path] = [f for f in input_files if f.stem not in {o_f.stem: o_f for o_f in output_files}]
+    logger.info(
+        f"{len(output_files)} raster files found in {output_dir}, processing {len(folder_files_filtered)}/{len(input_files)} files for {item}"
+    )
+    return folder_files_filtered
