@@ -13,11 +13,11 @@ def calculate_focal_range(subarr):
     return subarr.max() - subarr.min()
 
 
-def create_neighbour_from_tile(file: Path, output_dir: Path) -> None:
-    # src is the input raster file. It is being read by rasterio which returns a numpy.ndarray type
+def create_neighbour_raster(file: Path, output_dir: Path) -> None:
     """
-    The input raster file is opened with rasterio and read to return a numpy.ndarray type.
-    This array is analysed to find the range between pixels and their neighbours within a 3x3 kernel, using a filter window method.
+    The input raster file is opened with rasterio and read to a numpy.ndarray type.
+    This array is run through a filter which uses a moving 3x3 kernel window to find the range
+    between pixels and their neighbours, across the array.
     The filtered array is written to a tif output using rasterio.
     """
     src = rasterio.open(file)
@@ -38,7 +38,13 @@ def create_neighbour_from_tile(file: Path, output_dir: Path) -> None:
         dst.write(range_arr, 1)
 
 
-def create_difference_raster_per_tile(files: tuple[Path, Path], output_dir: Path) -> None:
+def create_difference_raster(files: tuple[Path, Path], output_dir: Path) -> None:
+    """
+    The input tuple contains the path for the DEM and DSM file.
+    Both raster files are opened with rasterio and read to a numpy.ndarray type.
+    The DEM array is minused from the DSM array to find the difference between rasters.
+    The difference array is written to a tif output using rasterio.
+    """
     dem_src = rasterio.open(files[0])
     dem_arr = dem_src.read(1)
     dsm_arr = (rasterio.open(files[1])).read(1)

@@ -3,7 +3,7 @@ from typing import List, Optional
 
 import typer
 
-from lidar_qc.array_calculations import create_neighbour_from_tile
+from lidar_qc.array_calculations import create_neighbour_raster
 from lidar_qc.cli.commands.build_vrt import build_vrt
 from lidar_qc.cli.timer import end_timer, start_timer
 from lidar_qc.cli.validations import validate_raster_folders, validate_script_progress
@@ -45,7 +45,7 @@ def neighbour_raster(
         start_message = f"Creating neighbors raster now for {folder.name}..."
         pbar_unit = "tile"
         results, errors = run_in_parallel(
-            func=create_neighbour_from_tile,
+            func=create_neighbour_raster,
             items=files,
             extra_kwargs={
                 "output_dir": subfolder,

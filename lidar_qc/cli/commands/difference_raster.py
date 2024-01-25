@@ -4,7 +4,7 @@ from typing import Optional
 
 import typer
 
-from lidar_qc.array_calculations import create_difference_raster_per_tile
+from lidar_qc.array_calculations import create_difference_raster
 from lidar_qc.cli.commands.build_vrt import build_vrt
 from lidar_qc.cli.timer import end_timer, start_timer
 from lidar_qc.cli.validations import validate_raster_folder, validate_script_progress
@@ -62,7 +62,7 @@ def difference_raster(
     start_message = f"Creating differencing raster now for {len(files)}/{len(dem_files.keys())} DEM files..."
     pbar_unit = "tile"
     results, errors = run_in_parallel(
-        func=create_difference_raster_per_tile,
+        func=create_difference_raster,
         items=files,
         extra_kwargs={
             "output_dir": subfolder,
