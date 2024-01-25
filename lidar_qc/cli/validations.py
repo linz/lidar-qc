@@ -1,6 +1,7 @@
 import os
 from pathlib import Path
-from typing import Any, List, Tuple, Type, Union
+from re import sub
+from typing import Any, Iterable, List, Tuple, Type, Union
 
 import fiona
 import typer
@@ -12,11 +13,17 @@ from lidar_qc.density_filters import (
     DENSITY_FILTER_COMMON_NO_FLAG,
     DensityFilter,
 )
+from lidar_qc.log import get_logger
 from lidar_qc.parallel import FatalError
 from lidar_qc.util import is_point_cloud_dir, is_raster_dir
 
+logger = get_logger()
+
 
 def validate_file_parent(value: Path) -> Path:
+    """
+    Raise error if file is not in a writable folder that exists.
+    """
     if not value.parent.exists() or not value.parent.is_dir():
         raise typer.BadParameter("File must be in a folder that exists")
     if not os.access(value.parent, os.W_OK):
@@ -25,6 +32,9 @@ def validate_file_parent(value: Path) -> Path:
 
 
 def validate_output_gpkg(value: Path) -> Path:
+    """
+    Raise error if file suffix is not ".gpkg".
+    """
     if value.suffix != ".gpkg":
         raise typer.BadParameter("File must end in .gpkg")
     validate_file_parent(value)
@@ -32,6 +42,9 @@ def validate_output_gpkg(value: Path) -> Path:
 
 
 def validate_geospatial_format(value: Path) -> Union[Path, None]:
+    """
+    Raise error if file suffix is not ".gpkg" or ".shp".
+    """
     if value:
         if value.suffix != ".gpkg" and value.suffix != ".shp":
             raise typer.BadParameter("File must end in .gpkg or .shp")
@@ -40,12 +53,37 @@ def validate_geospatial_format(value: Path) -> Union[Path, None]:
 
 
 def validate_input_las_dir(folder: Path) -> Path:
+    """
+    Raise error if folder does not contain ".las" or ".laz" files.
+    """
     if len(list(folder.glob("*.la[sz]"))) == 0:
         raise typer.BadParameter("Input directory does not contain LAS or LAZ files")
     return folder
 
 
+def validate_raster_folders(folders: list[Path]) -> list[Path]:
+    """
+    Raise error if any folder within the list of raster folders does not contain ".tif" files.
+    """
+    for folder in folders:
+        if len(list(folder.glob("*.tif"))) == 0:
+            raise typer.BadParameter(f"Input directory {folder.name} does not contain tif files")
+    return folders
+
+
+def validate_raster_folder(folder: Path) -> Path:
+    """
+    Raise error if folder does not contain ".tif" files.
+    """
+    if len(list(folder.glob("*.tif"))) == 0:
+        raise typer.BadParameter(f"Input directory {folder.name} does not contain tif files")
+    return folder
+
+
 def validate_attribute_field(layer: Path, attribute: str) -> bool:
+    """
+    Return True if attribute is in layer schema, False if it's not.
+    """
     with fiona.open(layer, "r") as c:
         if schema := c.schema:
             if attribute in list((schema)["properties"].keys()):
@@ -108,3 +146,49 @@ def find_data_subdirs(
                 if is_point_cloud_dir(child.name):
                     raw_data_dirs.append((child, PointCloudFileInfo))
     return raw_data_dirs
+
+
+def remove_invalid_files(files: Iterable[Path]) -> list[Path]:
+    """
+    Receives list of files to iterate through.
+    If files have been processed correctly, add file path to new list.
+    If files have been partially processed, delete files.
+    Returns: List of files that have been processed correctly.
+    """
+    valid_files: list[Path] = []
+    for file in files:
+        if file.stat().st_size > 0:
+            if not file.with_suffix(".tfw").exists():
+                file.unlink()
+            else:
+                valid_files.append(file)
+        elif file.stat().st_size == 0:
+            file.unlink()
+    return valid_files
+
+
+def validate_script_progress(input_files: list[Path], output_dir: Path, item: str) -> list[Path]:
+    """
+    Receives list of input files, output directory path, and an item to indicate what is being processed.
+    Code will look in subfolder to work out where its up to in the process:
+        - has the subfolder been created? If not, at the start of the process.
+          Return input file list.
+        - subfolder exists, does the vrt folder exist? If it does, then all files have been processed.
+          Return an empty list.
+        - subfolder exists but vrt folder doesnt exist, therefore processing was stopped mid-way through.
+          Return a filtered list of files still to be processed.
+    """
+    if not output_dir.exists():
+        output_dir.mkdir(exist_ok=True)
+        return input_files
+    if Path(output_dir / "vrt").exists():
+        logger.info(f"vrt folder found, skipping {item} processing")
+        return []
+    output_files = list(output_dir.glob("*.tif"))
+    if item == DensityFilter.pulse.value:
+        output_files: list[Path] = remove_invalid_files(files=output_files)
+    folder_files_filtered: list[Path] = [f for f in input_files if f.stem not in {o_f.stem: o_f for o_f in output_files}]
+    logger.info(
+        f"{len(output_files)} raster files found in {output_dir}, processing {len(folder_files_filtered)}/{len(input_files)} files for {item}"
+    )
+    return folder_files_filtered
