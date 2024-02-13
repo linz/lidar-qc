@@ -1,5 +1,5 @@
 # Toitū Te Whenua LINZ LiDAR QC Application
-linz-lidar-qc is a command line application that consists of tools to aid in quality checking LiDAR data, created by Toitū Te Whenua Land Information New Zealand.
+linz-lidar-qc is a command line application that consists of tools to aid in quality checking LiDAR data, created by Toitū Te Whenua Land Information New Zealand. Currently only works in Windows operating system.
 
 ## Installation
 Store code locally and install Anaconda. 
