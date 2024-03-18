@@ -34,6 +34,7 @@ class DensityFilter(str, Enum):
     noise_with_withheld = "noise_with_withheld"
     all_veg = "all_veg"
     medium_veg = "medium_veg"
+    high_veg = "high_veg"
     intensity = "intensity"
     bridge = "bridge"
 
@@ -71,6 +72,7 @@ DENSITY_FILTER_WHERE_STATEMENTS: dict[DensityFilter, str] = {
     DensityFilter.noise_with_withheld: "((Classification == 7 || Classification == 18) && ClassFlags == 4)",
     DensityFilter.all_veg: "(Classification == 3 || Classification == 4 || Classification == 5)",
     DensityFilter.medium_veg: "(Classification == 4)",
+    DensityFilter.high_veg: "(Classification == 5)",
     DensityFilter.intensity: "(ClassFlags == 0 || ClassFlags == 4 || ClassFlags == 8)",
     DensityFilter.bridge: "(Classification == 17 && ClassFlags == 0)",
 }
