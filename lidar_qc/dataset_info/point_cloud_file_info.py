@@ -427,6 +427,17 @@ class PointCloudFileInfo(FileInfo):
         else:
             return False
 
+    def is_point_data_format_correct(self) -> bool:
+        """
+        Receives an instance of the class.
+        Returns True if the header point data format is 6, 7, 8, 9, or 10. Will return False if not.
+        """
+        options: List[int] = [6, 7, 8, 9, 10]
+        if self.header_point_data_format in options:
+            return True
+        else:
+            return False
+
     def is_file_name_correct_format(self) -> bool:
         """
         Receives an instance of the class.

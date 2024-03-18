@@ -102,7 +102,7 @@ def summarise_point_cloud_product(file_infos: List["PointCloudFileInfo"]) -> Lis
         check_data["file_source_id"].append(file_info.header_file_source_id == 0)
         check_data["global_encoding"].append(file_info.header_global_encoding == 17)
         check_data["las_version"].append(file_info.version() == "1.4")
-        check_data["data_format"].append(file_info.header_point_data_format == 6)
+        check_data["data_format"].append(file_info.is_point_data_format_correct())
         check_data["min_z"].append(file_info.header_coordinates_min.z)
         check_data["max_z"].append(file_info.header_coordinates_max.z)
         check_data["min_intensity"].append(file_info.point_data_intensity.min)
@@ -151,7 +151,7 @@ def summarise_point_cloud_product(file_infos: List["PointCloudFileInfo"]) -> Lis
         ("Is file source ID correct?", "0", all_true("file_source_id")),
         ("Is global encoding correct?", "17", all_true("global_encoding")),
         ("Is LAS file version correct?", "LAS 1.4", all_true("las_version")),
-        ("Is point data format correct?", "6", all_true("data_format")),
+        ("Is point data format correct?", "6, 7, 8, 9, or 10", all_true("data_format")),
         ("Is scale factor correct?", "[0.001,0.001,0.001], [0.01,0.01,0.01], or [0.01,0.01,0.001]", all_true("scale_factor")),
         ("What is the Z value range?", "", f"{min(check_data['min_z'])} - {max(check_data['max_z'])}"),
         ("What is the intensity range?", "", f"{min(check_data['min_intensity'])} - {max(check_data['max_intensity'])}"),
