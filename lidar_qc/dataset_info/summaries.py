@@ -72,7 +72,7 @@ def summarise_raster_product(file_infos: List["RasterFileInfo"]) -> List[Tuple[s
         ("Does the coordinates match LINZ official tiles?", "", all_true("coordinates")),
         ("Are all tiles within the supplied tile index?", "", all_true("supplied_index")),
         (
-            "Does WKT have correct projection flags?",
+            "Does WKT have correct projection and horizontal datum flags?",
             "NZGD 2000 / New Zealand Transverse Mercator 2000, New Zealand Geodetic Datum 2000, 2193",
             all_true("projection"),
         ),
@@ -121,6 +121,7 @@ def summarise_point_cloud_product(file_infos: List["PointCloudFileInfo"]) -> Lis
         check_data["supplied_index"].append(file_info.is_in_supplied_tile_index())
         check_data["coordinates"].append(file_info.is_tiled_correctly())
         check_data["projection"].append(file_info.is_projection_correct_espg())
+        check_data["vert_datum"].append(file_info.is_vertical_datum_correct())
         check_data["classifications"].append(set(file_info.classifications.keys()))
         check_data["overlap"].append(bool(file_info.overlap_flag_classifications))
         check_data["withheld"].append(bool(file_info.withheld_flag_classifications))
@@ -177,9 +178,14 @@ def summarise_point_cloud_product(file_infos: List["PointCloudFileInfo"]) -> Lis
         ("Are all tiles within the supplied tile index?", "", all_true("supplied_index")),
         ("Does the coordinates match LINZ official tiles?", "", all_true("coordinates")),
         (
-            "Does WKT have correct projection flags?",
+            "Does WKT have correct projection and horizontal datum flags?",
             "NZGD 2000 / New Zealand Transverse Mercator 2000, New Zealand Geodetic Datum 2000, 2193",
             all_true("projection"),
+        ),
+        (
+            "Does WKT have correct vertical datum flags?",
+            "NZVD2016, New Zealand Vertical Datum 2016",
+            all_true("vert_datum"),
         ),
         (
             "Percent of total overlap points in dataset",

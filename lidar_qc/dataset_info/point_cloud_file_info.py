@@ -477,6 +477,16 @@ class PointCloudFileInfo(FileInfo):
         ]
         return ", ".join(extra_classifications)
 
+    def is_vertical_datum_correct(self) -> bool:
+        if self.projection is None:
+            return False
+        return all(
+            [
+                "NZVD2016" in self.projection,
+                "New Zealand Vertical Datum 2016" in self.projection,
+            ]
+        )
+
     def is_flag_none(self, flag: Dict[int, Classification] | None) -> str | None:
         if not flag:
             return None
