@@ -53,6 +53,7 @@ class PointCloudFileInfo(FileInfo):
             "is_file_name_correct_format": "bool",
             "is_file_name_correct_tile": "bool",
             "is_projection_correct": "bool",
+            "is_vertical_datum_correct": "bool",
             "is_in_supplied_tile_index": "bool",
             "classifications": "str",
             "unclassified": "int",
@@ -427,6 +428,17 @@ class PointCloudFileInfo(FileInfo):
         else:
             return False
 
+    def is_point_data_format_correct(self) -> bool:
+        """
+        Receives an instance of the class.
+        Returns True if the header point data format is 6, 7, 8, 9, or 10. Will return False if not.
+        """
+        options: set[int] = {6, 7, 8, 9, 10}
+        if self.header_point_data_format in options:
+            return True
+        else:
+            return False
+
     def is_file_name_correct_format(self) -> bool:
         """
         Receives an instance of the class.
@@ -476,6 +488,16 @@ class PointCloudFileInfo(FileInfo):
             if classification.id not in common_ids
         ]
         return ", ".join(extra_classifications)
+
+    def is_vertical_datum_correct(self) -> bool:
+        if self.projection is None:
+            return False
+        return all(
+            [
+                "NZVD2016" in self.projection,
+                "New Zealand Vertical Datum 2016" in self.projection,
+            ]
+        )
 
     def is_flag_none(self, flag: Dict[int, Classification] | None) -> str | None:
         if not flag:
@@ -556,6 +578,7 @@ class PointCloudFileInfo(FileInfo):
                 "is_file_name_correct_format": self.is_file_name_correct_format(),
                 "is_file_name_correct_tile": self.is_file_name_correct_tile(),
                 "is_projection_correct": self.is_projection_correct_espg(),
+                "is_vertical_datum_correct": self.is_vertical_datum_correct(),
                 "is_in_supplied_tile_index": self.is_in_supplied_tile_index(),
                 "classifications": f"{sorted(self.classifications.keys())}",
                 "unclassified": self.get_classification_value_per_tile(1),
