@@ -73,7 +73,7 @@ def density_raster(
                     "output_dir": subfolder,
                     "where_statement": DENSITY_FILTER_WHERE_STATEMENTS[filter_],
                     "dimension": "Intensity",
-                    "output_type": "min",
+                    "output_type": "mean",
                 },
                 start_message=start_message,
                 pbar_unit=pbar_unit,

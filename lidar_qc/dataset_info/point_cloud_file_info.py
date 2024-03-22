@@ -53,6 +53,7 @@ class PointCloudFileInfo(FileInfo):
             "is_file_name_correct_format": "bool",
             "is_file_name_correct_tile": "bool",
             "is_projection_correct": "bool",
+            "is_vertical_datum_correct": "bool",
             "is_in_supplied_tile_index": "bool",
             "classifications": "str",
             "unclassified": "int",
@@ -432,7 +433,7 @@ class PointCloudFileInfo(FileInfo):
         Receives an instance of the class.
         Returns True if the header point data format is 6, 7, 8, 9, or 10. Will return False if not.
         """
-        options: List[int] = [6, 7, 8, 9, 10]
+        options: set[int] = {6, 7, 8, 9, 10}
         if self.header_point_data_format in options:
             return True
         else:
@@ -577,6 +578,7 @@ class PointCloudFileInfo(FileInfo):
                 "is_file_name_correct_format": self.is_file_name_correct_format(),
                 "is_file_name_correct_tile": self.is_file_name_correct_tile(),
                 "is_projection_correct": self.is_projection_correct_espg(),
+                "is_vertical_datum_correct": self.is_vertical_datum_correct(),
                 "is_in_supplied_tile_index": self.is_in_supplied_tile_index(),
                 "classifications": f"{sorted(self.classifications.keys())}",
                 "unclassified": self.get_classification_value_per_tile(1),
