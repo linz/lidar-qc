@@ -52,11 +52,20 @@ def validate_geospatial_format(value: Path) -> Union[Path, None]:
     return value
 
 
-def validate_input_las_dir(folder: Path) -> Path:
+def validate_input_pc_dir(folder: Path) -> Path:
     """
     Raise error if folder does not contain ".las" or ".laz" files.
     """
     if len(list(folder.glob("*.la[sz]"))) == 0:
+        raise typer.BadParameter("Input directory does not contain LAS or LAZ files")
+    return folder
+
+
+def validate_input_laz_dir(folder: Path) -> Path:
+    """
+    Raise error if folder does not contain ".laz" files.
+    """
+    if len(list(folder.glob("*.laz"))) == 0:
         raise typer.BadParameter("Input directory does not contain LAS or LAZ files")
     return folder
 
