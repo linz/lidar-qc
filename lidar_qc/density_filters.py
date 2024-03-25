@@ -55,7 +55,10 @@ DENSITY_FILTER_COMMON_NO_FLAG: list[DensityFilter] = [
     DensityFilter.noise_no_flag,
 ]
 
+<<<<<<< Updated upstream
 DENSITY_FILTER_WHERE_STATEMENTS: dict[DensityFilter, str | None] = {
+=======
+# || is OR and && is AND
     DensityFilter.ground: "(Classification == 2)",
     DensityFilter.low_veg: "(Classification == 3)",
     DensityFilter.buildings: "(Classification == 6)",
