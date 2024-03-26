@@ -8,7 +8,7 @@ from lidar_qc.cli.timer import end_timer, start_timer
 from lidar_qc.cli.validations import (
     validate_attribute_field,
     validate_geospatial_format,
-    validate_input_las_dir,
+    validate_input_pc_dir,
 )
 from lidar_qc.log import configure_logging
 from lidar_qc.parallel import run_in_parallel
@@ -32,7 +32,7 @@ def psid(
         writable=True,
         readable=True,
         resolve_path=True,
-        callback=validate_input_las_dir,
+        callback=validate_input_pc_dir,
         help="Path to pointcloud directory. Must contain las or laz files.",
     ),
     output_dir: Path = typer.Option(

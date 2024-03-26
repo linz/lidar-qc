@@ -52,7 +52,7 @@ def validate_geospatial_format(value: Path) -> Union[Path, None]:
     return value
 
 
-def validate_input_las_dir(folder: Path) -> Path:
+def validate_input_pc_dir(folder: Path) -> Path:
     """
     Raise error if folder does not contain ".las" or ".laz" files.
     """
