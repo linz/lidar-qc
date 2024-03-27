@@ -46,6 +46,7 @@ DENSITY_FILTER_COMMON: list[DensityFilter] = [
     DensityFilter.buildings,
     DensityFilter.unclassified,
     DensityFilter.noise,
+    DensityFilter.intensity,
 ]
 DENSITY_FILTER_COMMON_NO_FLAG: list[DensityFilter] = [
     DensityFilter.ground_no_flag,
