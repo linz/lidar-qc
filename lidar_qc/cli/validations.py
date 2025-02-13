@@ -192,3 +192,12 @@ def validate_script_progress(input_files: list[Path], output_dir: Path, item: st
         f"{len(output_files)} raster files found in {output_dir}, processing {len(folder_files_filtered)}/{len(input_files)} files for {item}"
     )
     return folder_files_filtered
+
+def validate_year(year_string: str) -> str:
+    """
+    Ensure the year that is inputted is a digit, not None and is four digits.
+    """
+    if year_string is not None and year_string.isdigit() and len(year_string) == 4:
+        return year_string
+    else:
+        raise typer.BadParameter(f"Year {year_string} is not valid")

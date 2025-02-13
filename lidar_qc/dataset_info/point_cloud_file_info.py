@@ -21,6 +21,7 @@ class PointCloudFileInfo(FileInfo):
     Returns the dataclass instance for the file.
     """
 
+    file_type = "PointCloud"
     glob_pattern = "*.la[sz]"
     summarise_func = summarise_point_cloud_product
     _schema = {
@@ -144,6 +145,7 @@ class PointCloudFileInfo(FileInfo):
 
         data: dict[str, Any] = {}
         data["file_name"] = file.stem
+        data["file_extension"] = file.suffix
         data["supplied_tile_index_file"] = supplied_tile_index_file
 
         # Each match is either returning something or None.
