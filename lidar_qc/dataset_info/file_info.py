@@ -140,10 +140,10 @@ class FileInfo(BaseModel):
             ]
         )
 
-    def get_correct_tile(self):
+    def get_correct_tile(self) -> Dict:
         """
-        Uses the file polygon bounds to get a centroid which is used to get the official 1k tile, using index_tiles.py.
-        Returns True if the file name mapsheet and tile number match the official 1k tile, False if either one doesn't match.
+        Uses the file centroid to get the official 1k tile, using index_tiles.py.
+        Returns official tile if within tile scheme.
         """
         try:
             official_tile = official_tile_index.get_tile_from_point(self.bounding_box().centroid)
