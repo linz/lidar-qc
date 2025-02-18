@@ -48,7 +48,7 @@ def rename(
     called_from_cli: Annotated[bool, typer.Option(hidden=True)] = True,
 ):
     """
-    Rename a collection of files of either DEM, DSM or CL2.
+    Rename DEM, DSM or Point Cloud files in accordance with section 9.2 in the New Zealand National Aerial LiDAR Base Specification.
     """
 
     # Make dry-run always verbose
