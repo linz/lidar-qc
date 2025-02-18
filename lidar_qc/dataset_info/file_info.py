@@ -55,11 +55,12 @@ class FileInfo(BaseModel):
     Parent dataclass created using BaseModel from pydantic.
     Contains class methods which pertain to both child classes.
     """
-
+    file_type: ClassVar[str]
     glob_pattern: ClassVar[str]
     summarise_func: ClassVar
     _schema: ClassVar[dict]
     file_name: str | None
+    file_extension: str | None
     projection: str | None
     supplied_tile_index_file: Path | None
 
@@ -138,6 +139,18 @@ class FileInfo(BaseModel):
                 "2193" in self.projection,
             ]
         )
+
+    def get_correct_tile(self) -> Dict:
+        """
+        Uses the file centroid to get the official 1k tile, using index_tiles.py.
+        Returns official tile if within tile scheme.
+        """
+        try:
+            official_tile = official_tile_index.get_tile_from_point(self.bounding_box().centroid)
+        except ValueError:
+            logger.error(f"{self.file_name} is outside tile scheme")
+        
+        return official_tile       
 
     @staticmethod
     def _get_spatial_index(vector_file: Path):

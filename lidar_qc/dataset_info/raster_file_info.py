@@ -27,7 +27,7 @@ class RasterFileInfo(FileInfo):
     Child dataclass of FileInfo which stores metadata information from a raster file by parsing the output of gdalinfo.
     Returns the dataclass instance for the file.
     """
-
+    file_type = "Raster"
     glob_pattern = "*.tif"
     summarise_func = summarise_raster_product
     _schema = {
@@ -82,6 +82,7 @@ class RasterFileInfo(FileInfo):
         gdalinfo_output = gdalinfo(file)
         data: dict[str, Any] = {}
         data["file_name"] = file.stem
+        data["file_extension"] = file.suffix
         data["supplied_tile_index_file"] = supplied_tile_index_file
 
         if size := gdalinfo_output.get("size"):
@@ -166,6 +167,9 @@ class RasterFileInfo(FileInfo):
             self.coordinates_lower_right.x,
             self.coordinates_upper_left.y,
         )
+    
+    def centroid(self):
+        return self.bounding_box.centroid()
 
     def is_file_name_correct_format(self) -> bool:
         """
