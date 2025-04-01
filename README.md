@@ -29,7 +29,7 @@ The application is called using linz-lidar-qc. Use `--help` for more information
     <img src="./img/app.png">
 </p>
 
-There are currently 4 commands on the application. More commands will be added as development continues. 
+There are currently 5 commands on the application. More commands will be added as development continues. 
 
 ### build-vrt
 Creates a virtual raster for a directory of tif files.
@@ -90,6 +90,22 @@ To compare point source ID's for a dataset against the flightline ID's use both 
 linz-lidar-qc psid --input H:\lidar-dataset\Raw\Point_cloud --output H:\lidar-dataset\Processed --flightline H:\lidar-dataset\Raw\flightline.shp --fid-field FLIGHT_LIN
 ```
 
+### rename
+Rename DEM, DSM or Point Cloud files in accordance with section 9.2 in the New Zealand National Aerial LiDAR Base Specification. 
+This function runs as a dry run initially until `--write` is passed. It renames the existing files and does not make a copy.
+
+Basic usage:
+`--input` is the path to the directory containing subfolders of raster and point cloud files. ``--year` is the start year of the survey. `--write` confirms the overwrite. `--limit` limit the amount of files the dry-run is run against.
+
+Run a dry-run on 100 files:
+```bash
+linz-lidar-qc rename --input H:\lidar-dataset\Processed --year 2020 --limit 100
+```
+
+To rename files:
+```bash
+linz-lidar-qc rename --input H:\lidar-dataset\Processed --year 2020 --write
+```
 
 
 
