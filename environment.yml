@@ -20,4 +20,5 @@ dependencies:
   - typer
   - pdfcombine
   - pydantic
+  - s5cmd 
   - scipy
