@@ -1,10 +1,24 @@
 # Toitū Te Whenua LINZ LiDAR QC Application
 linz-lidar-qc is a command line application that consists of tools to aid in quality checking LiDAR data, created by Toitū Te Whenua Land Information New Zealand. Currently only works in Windows operating system.
 
-## Installation
-Store code locally and install Anaconda. 
+## Prerequisites
 
-In the Anaconda Terminal, navigate into the directory where the code is stored (using cd), and use the environment yml file to create a conda virtual environment:
+### LAStools
+
+Several commands (`density-raster`, `check-dataset`) depend on [LAStools](https://rapidlasso.de/lastools/) executables (`lasgrid`, `lasinfo`). LAStools must be installed separately:
+
+1. Download LAStools from [rapidlasso.de](https://rapidlasso.de/lastools/)
+2. Install to the default location (`C:\LAStools\`) or ensure the executables are on your system PATH
+
+> **Note:** The application currently expects LAStools executables at hardcoded Windows paths (e.g. `C:\LAStools\bin\lasgrid.exe`). See [#9](https://github.com/linz/lidar-qc/issues/9) for ongoing work to make these paths configurable and cross-platform.
+
+> **Note:** Recent LAStools downloads may use 64-bit suffixed executables (e.g. `lasinfo64.exe` instead of `lasinfo.exe`). If you encounter errors, check that the executable names match what the application expects.
+
+## Installation
+
+Store code locally and install [Anaconda](https://www.anaconda.com/download).
+
+In the Anaconda Terminal, navigate into the directory where the code is stored (using `cd`), and use the environment yml file to create a conda virtual environment:
 ```bash
 conda env create -f environment.yml
 ```
