@@ -339,9 +339,16 @@ class PointCloudFileInfo(FileInfo):
             lasinfo_args.extend(["-o", str(lasinfo_file)])
         else:
             lasinfo_args.append("-stdout")
+        KNOWN_WARNINGS = [
+            "Please note that LAStools is not",
+            "cannot open 'pcs.csv'",
+            "look-up for 2193 not implemented",
+        ]
         result = subprocess.run(args=lasinfo_args, capture_output=True, shell=True, check=True)
         if result.stderr:
-            raise RuntimeError(result.stderr)
+            stderr = result.stderr.decode() if isinstance(result.stderr, bytes) else result.stderr
+            if not any(w in stderr for w in KNOWN_WARNINGS):
+                raise RuntimeError(stderr)
         if no_lasinfo_txt is False:
             return lasinfo_file.read_text()  # type: ignore
         else:
