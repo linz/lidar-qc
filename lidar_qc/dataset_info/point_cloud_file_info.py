@@ -10,6 +10,7 @@ from lidar_qc.dataset_info.file_info import *
 from lidar_qc.dataset_info.summaries import summarise_point_cloud_product
 from lidar_qc.index_tiles import TileIndex, TileIndexScale
 from lidar_qc.log import get_logger
+from lidar_qc.lastools import find_lastools_exe
 
 logger = get_logger()
 official_tile_index = TileIndex(TileIndexScale.scale_1000)
@@ -329,7 +330,8 @@ class PointCloudFileInfo(FileInfo):
         Receives a file as a path and runs a subprocess with the file to create a lasinfo text file.
         Returns the contents of the lasinfo file as a string.
         """
-        lasinfo_args = ["C:\\LAStools\\bin\\lasinfo.exe", "-cd", "-repair_counters", "-i", str(file)]
+        lasinfo = find_lastools_exe("lasinfo")
+        lasinfo_args = [str(lasinfo), "-cd", "-repair_counters", "-i", str(file)]
         if no_lasinfo_txt is False:
             lasinfo_dir = file.parent / "las_info_reports"
             lasinfo_dir.mkdir(exist_ok=True)
