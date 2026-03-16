@@ -8,6 +8,7 @@ from lidar_qc.log import get_logger
 logger = get_logger()
 
 
+
 def child_vrt_filepaths(vrt_dir: Path, ras_dir: Path) -> dict[Any, Any]:
     """
     Receives the path for the vrt folder and raster (parent) directory.
@@ -15,7 +16,7 @@ def child_vrt_filepaths(vrt_dir: Path, ras_dir: Path) -> dict[Any, Any]:
     where the key is the child vrt path and name, and the value is a list of raster file paths (max 300).
     Returns the dictionary described above.
     """
-    tifs = sorted(list(ras_dir.glob("*.tif")))
+    tifs = sorted(f for ext in ("*.tif", "*.tiff", "*.TIF", "*.TIFF") for f in ras_dir.glob(ext))
     child_vrts = {}
     child_vrt_name = 0
     increment_list = []
