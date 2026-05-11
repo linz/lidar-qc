@@ -36,7 +36,11 @@ class ParallelErrorInfo(NamedTuple):
 
 
 def run_in_parallel(
-    func: Callable, items: Iterable, extra_kwargs: Dict[str, Any], start_message: str, pbar_unit: str
+    func: Callable,
+    items: Iterable,
+    extra_kwargs: Dict[str, Any],
+    start_message: str,
+    pbar_unit: str,
 ) -> Tuple[List[Any], List[ParallelErrorInfo]]:
     """
     Runs a process in parallel using concurrent futures.

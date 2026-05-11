@@ -84,33 +84,39 @@ DENSITY_FILTER_WHERE_STATEMENTS: dict[DensityFilter, str | None] = {
 }
 
 
-def create_raster_per_tile_pdal(
+def create_all_rasters_per_tile_pdal(
     input_file: Path,
-    output_dir: Path,
-    where_statement: str | None,
-    dimension: str,
-    output_type: str,
+    output_dirs: dict[str, Path],
+    filters: list[DensityFilter],
 ) -> None:
     """
-    Process to create the density raster tiles with PDAL pipeline.
-    Output file is a tif grid with resolution of 1, where each cell is populated
-    by the count of corresponding points.
-    The points are filtered based on the command line argument --filter.
+    Process all requested density filters for a single tile in one PDAL pipeline.
+    The LAZ file is read and decompressed once, with each filter written as a
+    separate writers.gdal stage. This avoids redundant decompression when
+    multiple density products are requested for the same tile.
     Args:
-        input_file: file to run through the pipeline.
-        output_dir: where the output density raster is created.
-        where_statement: how the input file is filtered during the pipeline.
-            This is defined at command line using --filter.
-        dimension: the point dimension written into each raster cell.
-        output_type: the statistic applied per cell (e.g. "count", "mean", "max").
+        input_file: tile to process.
+        output_dirs: mapping of filter value string to its output directory.
+        filters: which filters to run for this tile.
     """
-    output_file: Path = output_dir / f"{input_file.stem}.tif"
     pipeline_spec: list[dict] = [
         {
             "type": "readers.las",
             "filename": str(input_file),
-        },
-        {
+        }
+    ]
+
+    for filter_ in filters:
+        output_file = output_dirs[filter_.value] / f"{input_file.stem}.tif"
+
+        if filter_ == DensityFilter.intensity:
+            dimension = "Intensity"
+            output_type = "mean"
+        else:
+            dimension = "Z"
+            output_type = "count"
+
+        writer: dict = {
             "type": "writers.gdal",
             "resolution": "1",
             "radius": "1",
@@ -119,10 +125,14 @@ def create_raster_per_tile_pdal(
             "dimension": dimension,
             "output_type": output_type,
             "filename": str(output_file),
-        },
-    ]
-    if where_statement is not None:
-        pipeline_spec[1]["where"] = where_statement
+        }
+
+        where_statement = DENSITY_FILTER_WHERE_STATEMENTS[filter_]
+        if where_statement is not None:
+            writer["where"] = where_statement
+
+        pipeline_spec.append(writer)
+
     pipeline = pdal.Pipeline(json.dumps(pipeline_spec))
     pipeline.execute()
 
