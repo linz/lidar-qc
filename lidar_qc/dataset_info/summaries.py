@@ -16,7 +16,9 @@ if TYPE_CHECKING:
 #             check_data[key].append(value)
 
 
-def summarise_supplied_tile_index(supplied_tile_index: Path | None) -> List[Tuple[str, str, str]] | None:
+def summarise_supplied_tile_index(
+    supplied_tile_index: Path | None,
+) -> List[Tuple[str, str, str]] | None:
     """
     Receives a path to the supplied tile index input at command line or None.
     Opens the tile index with Fiona to get the feature count.
@@ -29,7 +31,9 @@ def summarise_supplied_tile_index(supplied_tile_index: Path | None) -> List[Tupl
     return [("Feature count", "", str(feature_count))]
 
 
-def summarise_raster_product(file_infos: List["RasterFileInfo"]) -> List[Tuple[str, str, str]]:
+def summarise_raster_product(
+    file_infos: List["RasterFileInfo"],
+) -> List[Tuple[str, str, str]]:
     """
     List of raster file info instances are looped through to test a series of bool statements, based on linz-spec.
     The result of these bool tests are appended to a dictionary of lists, which are used to summarised file metadata information at product scale.
@@ -53,7 +57,9 @@ def summarise_raster_product(file_infos: List["RasterFileInfo"]) -> List[Tuple[s
         check_data["supplied_index"].append(file_info.is_in_supplied_tile_index())
         check_data["projection"].append(file_info.is_projection_correct_espg())
 
-    def all_true(key: str, value_if_true: str = "Yes", value_if_false: str = "No") -> str:
+    def all_true(
+        key: str, value_if_true: str = "Yes", value_if_false: str = "No"
+    ) -> str:
         return value_if_true if all(check_data[key]) else value_if_false
 
     return [
@@ -65,12 +71,36 @@ def summarise_raster_product(file_infos: List["RasterFileInfo"]) -> List[Tuple[s
         ("Is origin x whole metre?", "no decimal values", all_true("origin_x")),
         ("Is origin y whole metre?", "no decimal values", all_true("origin_y")),
         ("Is file type correct?", "Float32", all_true("file_type")),
-        ("Minimum pixel value for dataset", "", str(min(check_data["min_pixel_value"]))),
-        ("Maximum pixel value for dataset", "", str(max(check_data["max_pixel_value"]))),
-        ("Is the name format correct?", "product_sheet_date_scale_tile", all_true("name_format")),
-        ("Does the tile name match LINZ official tiles?", "sheet and tile number", all_true("name_tile")),
-        ("Does the coordinates match LINZ official tiles?", "", all_true("coordinates")),
-        ("Are all tiles within the supplied tile index?", "", all_true("supplied_index")),
+        (
+            "Minimum pixel value for dataset",
+            "",
+            str(min(check_data["min_pixel_value"])),
+        ),
+        (
+            "Maximum pixel value for dataset",
+            "",
+            str(max(check_data["max_pixel_value"])),
+        ),
+        (
+            "Is the name format correct?",
+            "product_sheet_date_scale_tile",
+            all_true("name_format"),
+        ),
+        (
+            "Does the tile name match LINZ official tiles?",
+            "sheet and tile number",
+            all_true("name_tile"),
+        ),
+        (
+            "Does the coordinates match LINZ official tiles?",
+            "",
+            all_true("coordinates"),
+        ),
+        (
+            "Are all tiles within the supplied tile index?",
+            "",
+            all_true("supplied_index"),
+        ),
         (
             "Does WKT have correct projection and horizontal datum flags?",
             "NZGD 2000 / New Zealand Transverse Mercator 2000, New Zealand Geodetic Datum 2000, 2193",
@@ -91,7 +121,9 @@ def filter_zero(a, b):
         return a / b
 
 
-def summarise_point_cloud_product(file_infos: List["PointCloudFileInfo"]) -> List[Tuple[str, str, str]]:
+def summarise_point_cloud_product(
+    file_infos: List["PointCloudFileInfo"],
+) -> List[Tuple[str, str, str]]:
     """
     List of point cloud file info instances are looped through to test a series of bool statements, based on linz-spec.
     The result of these bool tests are appended to a dictionary of lists, which are used to summarised file metadata information at product scale.
@@ -126,7 +158,7 @@ def summarise_point_cloud_product(file_infos: List["PointCloudFileInfo"]) -> Lis
         check_data["overlap"].append(bool(file_info.overlap_flag_classifications))
         check_data["withheld"].append(bool(file_info.withheld_flag_classifications))
         check_data["overlap_total_points"].append(file_info.overlap_total_points)
-        check_data["total_points"].append(file_info.header_extended_number_of_points)
+        check_data["total_points"].append(file_info.total_points)
         if low_noise := file_info.classifications.get(7):
             check_data["low_noise"].append(low_noise.count)
         if high_noise := file_info.classifications.get(18):
@@ -136,10 +168,14 @@ def summarise_point_cloud_product(file_infos: List["PointCloudFileInfo"]) -> Lis
         if not_classed := file_info.classifications.get(0):
             check_data["zero_class"].append(not_classed.id == 0)
 
-    def all_true(key: str, value_if_true: str = "Yes", value_if_false: str = "No") -> str:
+    def all_true(
+        key: str, value_if_true: str = "Yes", value_if_false: str = "No"
+    ) -> str:
         return value_if_true if all(check_data[key]) else value_if_false
 
-    def any_true(key: str, value_if_true: str = "Yes", value_if_false: str = "No") -> str:
+    def any_true(
+        key: str, value_if_true: str = "Yes", value_if_false: str = "No"
+    ) -> str:
         return value_if_true if any(check_data[key]) else value_if_false
 
     def dataset_classifications(key: str, dataset_classes: set = set()) -> str:
@@ -152,15 +188,51 @@ def summarise_point_cloud_product(file_infos: List["PointCloudFileInfo"]) -> Lis
         ("Is global encoding correct?", "17", all_true("global_encoding")),
         ("Is LAS file version correct?", "LAS 1.4", all_true("las_version")),
         ("Is point data format correct?", "6, 7, 8, 9, or 10", all_true("data_format")),
-        ("Is scale factor correct?", "[0.001,0.001,0.001], [0.01,0.01,0.01], or [0.01,0.01,0.001]", all_true("scale_factor")),
-        ("What is the Z value range?", "", f"{min(check_data['min_z'])} - {max(check_data['max_z'])}"),
-        ("What is the intensity range?", "", f"{min(check_data['min_intensity'])} - {max(check_data['max_intensity'])}"),
-        ("What is the return number range?", "", f"{min(check_data['min_return'])} - {max(check_data['max_return'])}"),
-        ("What is the scan angle range?", "", f"{min(check_data['min_scan_angle'])} - {max(check_data['max_scan_angle'])}"),
-        ("What is the point source ID range?", "", f"{min(check_data['min_psid'])} - {max(check_data['max_psid'])}"),
-        ("What is the gps time range?", "", f"{min(check_data['min_gps'])} - {max(check_data['max_gps'])}"),
-        ("Dataset classification IDs", "1,2,3,4,5,6,7,9,18", dataset_classifications("classifications")),
-        ("Are there any tiles with class 0?", "Class 0 points must be withheld", any_true("zero_class")),
+        (
+            "Is scale factor correct?",
+            "[0.001,0.001,0.001], [0.01,0.01,0.01], or [0.01,0.01,0.001]",
+            all_true("scale_factor"),
+        ),
+        (
+            "What is the Z value range?",
+            "",
+            f"{min(check_data['min_z'])} - {max(check_data['max_z'])}",
+        ),
+        (
+            "What is the intensity range?",
+            "",
+            f"{min(check_data['min_intensity'])} - {max(check_data['max_intensity'])}",
+        ),
+        (
+            "What is the return number range?",
+            "",
+            f"{min(check_data['min_return'])} - {max(check_data['max_return'])}",
+        ),
+        (
+            "What is the scan angle range?",
+            "",
+            f"{min(check_data['min_scan_angle'])} - {max(check_data['max_scan_angle'])}",
+        ),
+        (
+            "What is the point source ID range?",
+            "",
+            f"{min(check_data['min_psid'])} - {max(check_data['max_psid'])}",
+        ),
+        (
+            "What is the gps time range?",
+            "",
+            f"{min(check_data['min_gps'])} - {max(check_data['max_gps'])}",
+        ),
+        (
+            "Dataset classification IDs",
+            "1,2,3,4,5,6,7,9,18",
+            dataset_classifications("classifications"),
+        ),
+        (
+            "Are there any tiles with class 0?",
+            "Class 0 points must be withheld",
+            any_true("zero_class"),
+        ),
         (
             "Pulse density for dataset by first returns",
             "4 or 8",
@@ -173,10 +245,26 @@ def summarise_point_cloud_product(file_infos: List["PointCloudFileInfo"]) -> Lis
         ),
         ("Are there overlap points?", "", any_true("overlap")),
         ("Are there withheld points?", "", any_true("withheld")),
-        ("Is the name format correct?", "product_sheet_date_scale_tile", all_true("name_format")),
-        ("Does the tile name match LINZ official tiles?", "sheet and tile number", all_true("name_tile")),
-        ("Are all tiles within the supplied tile index?", "", all_true("supplied_index")),
-        ("Does the coordinates match LINZ official tiles?", "", all_true("coordinates")),
+        (
+            "Is the name format correct?",
+            "product_sheet_date_scale_tile",
+            all_true("name_format"),
+        ),
+        (
+            "Does the tile name match LINZ official tiles?",
+            "sheet and tile number",
+            all_true("name_tile"),
+        ),
+        (
+            "Are all tiles within the supplied tile index?",
+            "",
+            all_true("supplied_index"),
+        ),
+        (
+            "Does the coordinates match LINZ official tiles?",
+            "",
+            all_true("coordinates"),
+        ),
         (
             "Does WKT have correct projection and horizontal datum flags?",
             "NZGD 2000 / New Zealand Transverse Mercator 2000, New Zealand Geodetic Datum 2000, 2193",
