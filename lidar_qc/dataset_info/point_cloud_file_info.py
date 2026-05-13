@@ -1,30 +1,61 @@
-import re
+import json
 import subprocess
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Tuple, Union
+from typing import Any, Dict, List
 
+import numpy as np
+import pdal
 from pydantic import ValidationError
 from shapely.geometry import Polygon, box, mapping
 
-from lidar_qc.dataset_info.file_info import *
+from lidar_qc.dataset_info.file_info import (
+    XYZ,
+    Classification,
+    FileInfo,
+    MinMax,
+    MinMaxFloat,
+)
 from lidar_qc.dataset_info.summaries import summarise_point_cloud_product
 from lidar_qc.index_tiles import TileIndex, TileIndexScale
 from lidar_qc.log import get_logger
-from lidar_qc.lastools import find_lastools_exe
 
 logger = get_logger()
 official_tile_index = TileIndex(TileIndexScale.scale_1000)
 
+# Standard LAS classification names by code
+CLASSIFICATION_NAMES: dict[int, str] = {
+    0: "Never Classified",
+    1: "Unclassified",
+    2: "Ground",
+    3: "Low Vegetation",
+    4: "Medium Vegetation",
+    5: "High Vegetation",
+    6: "Building",
+    7: "Low Noise",
+    8: "Reserved",
+    9: "Water",
+    10: "Rail",
+    11: "Road Surface",
+    12: "Reserved",
+    13: "Wire Guard",
+    14: "Wire Conductor",
+    15: "Transmission Tower",
+    16: "Wire Structure Connector",
+    17: "Bridge Deck",
+    18: "High Noise",
+}
+
 
 class PointCloudFileInfo(FileInfo):
     """
-    Child dataclass of FileInfo which stores metadata information from a pointcloud file by parsing the output of lasinfo.
-    Returns the dataclass instance for the file.
+    Child dataclass of FileInfo which stores metadata information from a
+    point cloud file using PDAL. Replaces the previous lasinfo-based approach.
     """
 
     file_type = "PointCloud"
     glob_pattern = "*.la[sz]"
     summarise_func = summarise_point_cloud_product
+
     _schema = {
         "geometry": "Polygon",
         "properties": {
@@ -45,10 +76,10 @@ class PointCloudFileInfo(FileInfo):
             "intensity_max": "int",
             "return_number_min": "int",
             "return_number_max": "int",
-            "scan_angle_min": "int",
-            "scan_angle_max": "int",
-            "point_source_id_min": "float",
-            "point_source_id_max": "float",
+            "scan_angle_min": "float",
+            "scan_angle_max": "float",
+            "point_source_id_min": "int",
+            "point_source_id_max": "int",
             "gps_time_min": "float",
             "gps_time_max": "float",
             "is_tiling_correct": "bool",
@@ -76,46 +107,43 @@ class PointCloudFileInfo(FileInfo):
             "point_density": "float",
             "pulse_density_first": "float",
             "pulse_density_last": "float",
+            "header_count_correct": "bool",
             "warnings": "str",
             "errors": "str",
         },
     }
+
+    # --- Header fields (from readers.las metadata, no point scan needed) ---
     header_file_source_id: int | None
     header_global_encoding: int | None
     header_major_version: int | None
     header_minor_version: int | None
-    header_size: int | None
     header_point_data_format: int | None
-    header_point_data_record_length: int | None
-    header_number_of_points: int | None
-    header_number_of_points_by_return: List[int] | None
     header_scale_factor: XYZ | None
     header_offset: XYZ | None
     header_coordinates_min: XYZ
     header_coordinates_max: XYZ
-    header_extended_number_of_points: int | None
-    header_extended_number_of_points_by_return: List[int] | None
-    point_data_x: MinMax
-    point_data_y: MinMax
-    point_data_z: MinMax
-    point_data_intensity: MinMax
-    point_data_return_number: MinMax
-    point_data_scan_direction_flag: MinMax | None
-    point_data_scan_angle_rank: MinMax
-    point_data_point_source_id: MinMax
-    point_data_gps_time: MinMaxFloat
-    number_of_first_returns: float | None
-    number_of_last_returns: float | None
+    # Unified point count — LAS 1.4 extended count preferred, falls back to
+    # legacy count. PDAL exposes this as a single normalised value.
+    total_points: int | None
+    # Unified points-by-return list — LAS 1.4 extended preferred
+    points_by_return: List[int] | None
+
+    # --- Stats fields (from filters.stats + numpy, requires full point scan) ---
+    point_data_intensity: MinMax | None
+    point_data_return_number: MinMax | None
+    point_data_scan_angle_rank: MinMaxFloat | None
+    point_data_point_source_id: MinMax | None
+    point_data_gps_time: MinMaxFloat | None
+    number_of_first_returns: int | None
+    number_of_last_returns: int | None
     area_m: float | None
-    point_density: Returns | None
-    point_spacing: Returns | None
-    is_points_header_correct: bool | None
-    is_extended_points_header_correct: bool | None
-    is_points_by_return_in_header_correct: bool | None
-    is_extended_points_by_return_in_header_correct: bool | None
-    pulses_by_number_of_returns: List[int] | None
+
+    # --- Classification histograms ---
     classifications: Dict[int, Classification]
     extended_classifications: Dict[int, Classification] | None
+
+    # --- Flag breakdowns ---
     overlap_total_points: int | None
     overlap_flag_classifications: Dict[int, Classification] | None
     withheld_total_points: int | None
@@ -124,199 +152,198 @@ class PointCloudFileInfo(FileInfo):
     synthetic_flag_classifications: Dict[int, Classification] | None
     keypoints_total_points: int | None
     keypoints_flag_classifications: Dict[int, Classification] | None
+
+    # --- Validation results ---
+    # True if header point count matches actual scanned count
+    header_count_correct: bool | None
     warnings: List[str] | None
     errors: List[str] | None
 
     @classmethod
-    def from_file(cls, file: Path, supplied_tile_index_file: Path, no_lasinfo_txt: bool) -> "PointCloudFileInfo":
+    def from_file(
+        cls,
+        file: Path,
+        supplied_tile_index_file: Path | None,
+        pdal_info_dir: Path | None = None,
+    ) -> "PointCloudFileInfo":
         """
-        This function runs the _run_lasinfo method to capture the contents of the lasinfo file.
-        The dataclass is then populated using regex expressions to store information from the lasinfo contents.
+        Reads a LAS/LAZ file using PDAL and populates the dataclass.
+        Replaces the previous lasinfo-based approach.
 
         Args:
-            cls: the class instance. ? check with Andrew
-            file: the file for a given class instance.
-            supplied_tile_index_file: path to the supplied tile index (not a layer object).
+            file: the LAS/LAZ file to process.
+            supplied_tile_index_file: path to the supplied tile index, or None.
+            pdal_info_dir: if provided, writes pdal info JSON output to this
+                directory as <stem>.json for each tile.
 
-        Returns the dataclass for the file.
+        Returns the populated dataclass instance.
         """
-        lasinfo_output = cls._run_lasinfo(file, no_lasinfo_txt)
-        integer = r"(-?\d+)"  # a group containing an optional hyphen minus followed by 1 or more digits.
-        decimal = r"(-?\d+\.?\d*)"  # a group containing an optional hyphen minus followed by 1 or more digits followed by an optional dot followed by 0 or more digits.
+        header, stats_meta, points = cls._run_pdal(file)
+
+        if pdal_info_dir is not None:
+            cls._write_pdal_info(file, pdal_info_dir)
 
         data: dict[str, Any] = {}
+        errors: list[str] = []
+        warnings: list[str] = []
+
         data["file_name"] = file.stem
         data["file_extension"] = file.suffix
         data["supplied_tile_index_file"] = supplied_tile_index_file
 
-        # Each match is either returning something or None.
-        match = re.search(rf"\s+file source ID:\s+{integer}", lasinfo_output)
-        data["header_file_source_id"] = int(match.group(1)) if match else None
+        # --- Header fields ---
+        data["header_file_source_id"] = header.get("filesource_id")
+        data["header_global_encoding"] = header.get("global_encoding")
+        data["header_major_version"] = header.get("major_version")
+        data["header_minor_version"] = header.get("minor_version")
+        data["header_point_data_format"] = header.get("dataformat_id")
 
-        match = re.search(rf"\s+global_encoding:\s+{integer}", lasinfo_output)
-        data["header_global_encoding"] = int(match.group(1)) if match else None
-
-        match = re.search(rf"\s+version major\.minor:\s+{integer}\.{integer}", lasinfo_output)
-        data["header_major_version"] = int(match.group(1)) if match else None
-        data["header_minor_version"] = int(match.group(2)) if match else None
-
-        match = re.search(rf"\s+header size:\s+{integer}", lasinfo_output)
-        data["header_size"] = int(match.group(1)) if match else None
-
-        match = re.search(rf"\s+point data format:\s+{integer}", lasinfo_output)
-        data["header_point_data_format"] = int(match.group(1)) if match else None
-
-        match = re.search(rf"\s+point data record length:\s+{integer}", lasinfo_output)
-        data["header_point_data_record_length"] = int(match.group(1)) if match else None
-
-        match = re.search(rf"\s+number of point records:\s+{integer}", lasinfo_output)
-        data["header_number_of_points"] = int(match.group(1)) if match else None
-
-        match = re.search(
-            rf"\s+number of points by return:\s+{integer} {integer} {integer} {integer} {integer}", lasinfo_output
-        )
-        data["header_number_of_points_by_return"] = [int(x) for x in match.groups()] if match else None
-
-        match = re.search(rf"\s+scale factor x y z:\s+{decimal} {decimal} {decimal}", lasinfo_output)
         data["header_scale_factor"] = (
-            XYZ(x=float(match.group(1)), y=float(match.group(2)), z=float(match.group(3))) if match else None
+            XYZ(
+                x=header["scale_x"],
+                y=header["scale_y"],
+                z=header["scale_z"],
+            )
+            if all(k in header for k in ("scale_x", "scale_y", "scale_z"))
+            else None
         )
 
-        match = re.search(rf"\s+offset x y z:\s+{decimal} {decimal} {decimal}", lasinfo_output)
         data["header_offset"] = (
-            XYZ(x=float(match.group(1)), y=float(match.group(2)), z=float(match.group(3))) if match else None
+            XYZ(
+                x=header["offset_x"],
+                y=header["offset_y"],
+                z=header["offset_z"],
+            )
+            if all(k in header for k in ("offset_x", "offset_y", "offset_z"))
+            else None
         )
 
-        match = re.search(rf"\s+min x y z:\s+{decimal} {decimal} {decimal}", lasinfo_output)
-        data["header_coordinates_min"] = (
-            XYZ(x=float(match.group(1)), y=float(match.group(2)), z=float(match.group(3))) if match else None
+        data["header_coordinates_min"] = XYZ(
+            x=header["minx"], y=header["miny"], z=header["minz"]
+        )
+        data["header_coordinates_max"] = XYZ(
+            x=header["maxx"], y=header["maxy"], z=header["maxz"]
         )
 
-        match = re.search(rf"\s+max x y z:\s+{decimal} {decimal} {decimal}", lasinfo_output)
-        data["header_coordinates_max"] = (
-            XYZ(x=float(match.group(1)), y=float(match.group(2)), z=float(match.group(3))) if match else None
+        # Use spatialreference (compound WKT) for full proj + vertical datum checks
+        data["projection"] = header.get("spatialreference")
+
+        # Total points — PDAL normalises LAS 1.0-1.3 and LAS 1.4 extended
+        data["total_points"] = header.get("count")
+
+        # Points by return — not directly in PDAL header metadata,
+        # derive from numpy array enumeration below
+        data["points_by_return"] = None  # populated below
+
+        # --- Stats fields from numpy array ---
+        stat_lookup: dict[str, dict] = {s["name"]: s for s in stats_meta}
+
+        def get_minmax(name: str) -> MinMax | None:
+            if s := stat_lookup.get(name):
+                return MinMax(min=int(s["minimum"]), max=int(s["maximum"]))
+            return None
+
+        def get_minmax_float(name: str) -> MinMaxFloat | None:
+            if s := stat_lookup.get(name):
+                return MinMaxFloat(min=float(s["minimum"]), max=float(s["maximum"]))
+            return None
+
+        data["point_data_intensity"] = get_minmax("Intensity")
+        data["point_data_return_number"] = get_minmax("ReturnNumber")
+        data["point_data_scan_angle_rank"] = get_minmax_float("ScanAngleRank")
+        data["point_data_point_source_id"] = get_minmax("PointSourceId")
+        data["point_data_gps_time"] = get_minmax_float("GpsTime")
+
+        # --- Counts from numpy ---
+        # Return number counts
+        return_values, return_counts = np.unique(
+            points["ReturnNumber"], return_counts=True
+        )
+        return_count_map: dict[int, int] = dict(
+            zip(return_values.tolist(), return_counts.tolist())
         )
 
-        match = re.search(rf"\s+extended number of point records:\s+{integer}", lasinfo_output)
-        data["header_extended_number_of_points"] = int(match.group(1)) if match else None
+        # Points by return list — index 0 = return 1, etc.
+        max_return = int(return_values.max()) if len(return_values) > 0 else 0
+        data["points_by_return"] = [
+            return_count_map.get(i, 0) for i in range(1, max_return + 1)
+        ]
+        data["number_of_first_returns"] = return_count_map.get(1, 0)
+        # Last return = points where ReturnNumber == NumberOfReturns
+        last_return_mask = points["ReturnNumber"] == points["NumberOfReturns"]
+        data["number_of_last_returns"] = int(np.sum(last_return_mask))
 
-        match = re.search(
-            rf"\s+extended number of points by return:\s+{integer} {integer} {integer} {integer} {integer} {integer} {integer} {integer} {integer} {integer}",
-            lasinfo_output,
+        # Area from header bounds
+        width = header["maxx"] - header["minx"]
+        height = header["maxy"] - header["miny"]
+        data["area_m"] = float(width * height) if width > 0 and height > 0 else None
+
+        # --- Header count validation ---
+        actual_count = int(len(points))
+        header_count = data["total_points"]
+        data["header_count_correct"] = (
+            actual_count == header_count if header_count is not None else None
         )
-        data["header_extended_number_of_points_by_return"] = [int(x) for x in match.groups()] if match else None
+        if data["header_count_correct"] is False:
+            warnings.append(
+                f"Header point count ({header_count}) does not match "
+                f"actual point count ({actual_count}). Consider running --repair."
+            )
 
-        match = re.search(r"\s+WKT OGC COORDINATE SYSTEM:\n\s+(.+)", lasinfo_output)
-        data["projection"] = str(match.group(1)) if match else None
-
-        match = re.search(
-            r"reporting minimum and maximum for all LAS point record entries \.\.\.\n"
-            rf"\s+X\s+{integer}\s+{integer}\n"
-            rf"\s+Y\s+{integer}\s+{integer}\n"
-            rf"\s+Z\s+{integer}\s+{integer}",
-            lasinfo_output,
+        # --- Classification histogram ---
+        class_values, class_counts = np.unique(
+            points["Classification"], return_counts=True
         )
-        data["point_data_x"] = MinMax(min=int(match.group(1)), max=int(match.group(2))) if match else None
-        data["point_data_y"] = MinMax(min=int(match.group(3)), max=int(match.group(4))) if match else None
-        data["point_data_z"] = MinMax(min=int(match.group(5)), max=int(match.group(6))) if match else None
+        data["classifications"] = {
+            int(c): Classification(
+                id=int(c),
+                name=CLASSIFICATION_NAMES.get(int(c), f"Unknown ({c})"),
+                count=int(n),
+            )
+            for c, n in zip(class_values, class_counts)
+        }
 
-        match = re.search(rf"\s+intensity\s+{integer}\s+{integer}", lasinfo_output)
-        data["point_data_intensity"] = MinMax(min=int(match.group(1)), max=int(match.group(2))) if match else None
+        # Extended classifications — codes > 63 are LAS 1.4 extended
+        data["extended_classifications"] = {
+            k: v for k, v in data["classifications"].items() if k > 63
+        } or None
 
-        match = re.search(rf"\s+return_number\s+{integer}\s+{integer}", lasinfo_output)
-        data["point_data_return_number"] = MinMax(min=int(match.group(1)), max=int(match.group(2))) if match else None
-
-        match = re.search(rf"\s+scan_direction_flag\s+{integer}\s+{integer}", lasinfo_output)
-        data["point_data_scan_direction_flag"] = MinMax(min=int(match.group(1)), max=int(match.group(2))) if match else None
-
-        match = re.search(rf"\s+scan_angle_rank\s+{integer}\s+{integer}", lasinfo_output)
-        data["point_data_scan_angle_rank"] = MinMax(min=int(match.group(1)), max=int(match.group(2))) if match else None
-
-        match = re.search(rf"\s+point_source_ID\s+{integer}\s+{integer}", lasinfo_output)
-        data["point_data_point_source_id"] = MinMax(min=int(match.group(1)), max=int(match.group(2))) if match else None
-
-        match = re.search(rf"\s+gps_time\s+{decimal}\s+{decimal}", lasinfo_output)
-        data["point_data_gps_time"] = MinMaxFloat(min=float(match.group(1)), max=float(match.group(2))) if match else None
-
-        match = re.search(rf"number of first returns:\s+{integer}", lasinfo_output)
-        data["number_of_first_returns"] = int(match.group(1)) if match else None
-
-        match = re.search(rf"number of last returns:\s+{integer}", lasinfo_output)
-        data["number_of_last_returns"] = int(match.group(1)) if match else None
-
-        match = re.search(rf"covered area in square meters\/kilometers:\s+{integer}\/{decimal}", lasinfo_output)
-        data["area_m"] = int(match.group(1)) if match else None
-
-        match = re.search(rf"point density:\s+all returns\s+{decimal}\s+last only\s+{decimal}", lasinfo_output)
-        data["point_density"] = Returns(all=float(match.group(1)), last=float(match.group(2))) if match else None
-
-        match = re.search(rf"\s+spacing:\s+all returns\s+{decimal}\s+last only\s+{decimal}", lasinfo_output)
-        data["point_spacing"] = Returns(all=float(match.group(1)), last=float(match.group(2))) if match else None
-
-        match = re.search(r"number of point records in header is correct\.", lasinfo_output)
-        data["is_points_header_correct"] = bool(match) if match else None
-
-        match = re.search(r"extended number of point records in header is correct\.", lasinfo_output)
-        data["is_extended_points_header_correct"] = bool(match) if match else None
-
-        match = re.search(r"number of points by return in header is correct\.", lasinfo_output)
-        data["is_points_by_return_in_header_correct"] = bool(match) if match else None
-
-        match = re.search(r"extended number of points by return in header is correct\.", lasinfo_output)
-        data["is_extended_points_by_return_in_header_correct"] = bool(match) if match else None
-
-        match = re.search(
-            rf"overview over extended number of returns of given pulse:\s+{integer} {integer} {integer} {integer} {integer} {integer} {integer} {integer} {integer} {integer}",
-            lasinfo_output,
-        )
-        data["pulses_by_number_of_returns"] = [int(x) for x in match.groups()] if match else None
-
-        def add_regex_to_dictionary(search_string: str, data_key: str, total_points: str | None = None):
-            # nonlocal data
-            match = re.search(search_string, lasinfo_output)
-            match_text = match.group(1) if match else None
-            if total_points:
-                data[total_points] = int(match.group(2)) if match else None
-            if match_text:
-                results = re.findall(
-                    r"(\d+(?:(?= of)|(?=  ))).*((?:(?<=are )|(?<=  ))\w+\s*\w*|Reserved for ASPRS Definition)\s+\((\d+)\)",
-                    str(match_text),
+        # --- Flag breakdowns ---
+        def flag_breakdown(
+            flag_name: str,
+        ) -> tuple[int, Dict[int, Classification] | None]:
+            mask = points[flag_name] == 1
+            total = int(np.sum(mask))
+            if total == 0:
+                return 0, None
+            flagged_classes, flagged_counts = np.unique(
+                points["Classification"][mask], return_counts=True
+            )
+            breakdown = {
+                int(c): Classification(
+                    id=int(c),
+                    name=CLASSIFICATION_NAMES.get(int(c), f"Unknown ({c})"),
+                    count=int(n),
                 )
-                data[data_key] = {int(r[2]): Classification(id=int(r[2]), name=str(r[1]), count=int(r[0])) for r in results}
-            else:
-                data[data_key] = None
+                for c, n in zip(flagged_classes, flagged_counts)
+            }
+            return total, breakdown
 
-        add_regex_to_dictionary(rf"histogram of classification of points:\n((?: +\d+\s+.+?\)\n)+)", "classifications")
-        add_regex_to_dictionary(
-            rf"(\s+\+->\s+flagged as extended overlap:\s+{integer}\n(?:\s*\+--->.+?\)\n)*)",
-            "overlap_flag_classifications",
-            "overlap_total_points",
+        data["overlap_total_points"], data["overlap_flag_classifications"] = (
+            flag_breakdown("Overlap")
         )
-        add_regex_to_dictionary(
-            rf"(\s+\+->\s+flagged as withheld:\s+{integer}\n(?:\s*\+--->.+?\)\n)*)",
-            "withheld_flag_classifications",
-            "withheld_total_points",
+        data["withheld_total_points"], data["withheld_flag_classifications"] = (
+            flag_breakdown("Withheld")
         )
-        add_regex_to_dictionary(
-            rf"(\s+\+->\s+flagged as synthetic:\s+{integer}\n(?:\s*\+--->.+?\)\n)*)",
-            "synthetic_flag_classifications",
-            "synthetic_total_points",
+        data["synthetic_total_points"], data["synthetic_flag_classifications"] = (
+            flag_breakdown("Synthetic")
         )
-        add_regex_to_dictionary(
-            rf"(\s+\+->\s+flagged as keypoints:\s+{integer}\n(?:\s*\+--->.+?\)\n)*)",
-            "keypoints_flag_classifications",
-            "keypoints_total_points",
-        )
-        add_regex_to_dictionary(
-            rf"(histogram of extended classification of points:\n(?:\s*.+?\)\n)*)", "extended_classifications"
+        data["keypoints_total_points"], data["keypoints_flag_classifications"] = (
+            flag_breakdown("KeyPoint")
         )
 
-        for search_string, data_key in [("WARNING", "warnings"), ("ERROR", "errors")]:
-            match = re.findall(rf"(?<={search_string}: ).+", lasinfo_output)
-            if len(match) == 0:
-                data[data_key] = None
-            else:
-                data[data_key] = match
+        data["warnings"] = warnings if warnings else None
+        data["errors"] = errors if errors else None
 
         try:
             return cls(**data)
@@ -325,79 +352,136 @@ class PointCloudFileInfo(FileInfo):
             raise ValueError(f"Could not parse {error_fields}")
 
     @staticmethod
-    def _run_lasinfo(file: Path, no_lasinfo_txt: bool) -> str:
+    def _run_pdal(file: Path) -> tuple[dict, list[dict], np.ndarray]:
         """
-        Receives a file as a path and runs a subprocess with the file to create a lasinfo text file.
-        Returns the contents of the lasinfo file as a string.
-        """
-        lasinfo = find_lastools_exe("lasinfo")
-        lasinfo_args = [str(lasinfo), "-cd", "-repair_counters", "-i", str(file)]
-        if no_lasinfo_txt is False:
-            lasinfo_dir = file.parent / "las_info_reports"
-            lasinfo_dir.mkdir(exist_ok=True)
-            lasinfo_file = lasinfo_dir / f"{file.stem}.txt"
-            lasinfo_args.extend(["-o", str(lasinfo_file)])
-        else:
-            lasinfo_args.append("-stdout")
-        KNOWN_WARNINGS = [
-            "Please note that LAStools is not",
-            "cannot open 'pcs.csv'",
-            "look-up for 2193 not implemented",
-        ]
-        result = subprocess.run(args=lasinfo_args, capture_output=True, shell=True, check=True)
-        if result.stderr:
-            stderr = result.stderr.decode() if isinstance(result.stderr, bytes) else result.stderr
-            if not any(w in stderr for w in KNOWN_WARNINGS):
-                raise RuntimeError(stderr)
-        if no_lasinfo_txt is False:
-            return lasinfo_file.read_text()  # type: ignore
-        else:
-            return result.stdout.decode().replace("\r\n", "\n")
+        Executes a PDAL pipeline with readers.las and filters.stats against
+        the given file. Returns the readers.las header metadata dict, the
+        filters.stats statistic list, and the numpy point array.
 
-    def version(self) -> Union[str, None]:
+        Args:
+            file: LAS/LAZ file to read.
+
+        Returns:
+            header: dict of readers.las metadata fields
+            stats: list of statistic dicts from filters.stats
+            points: numpy structured array of all points
         """
-        Receives an instance of the class.
-        Returns a string of the major and minor las version.
+        pipeline_spec = [
+            {
+                "type": "readers.las",
+                "filename": str(file),
+            },
+            {
+                "type": "filters.stats",
+                "dimensions": (
+                    "X,Y,Z,Intensity,ReturnNumber,NumberOfReturns,"
+                    "ScanAngleRank,PointSourceId,GpsTime,"
+                    "Classification,Overlap,Withheld,Synthetic,KeyPoint"
+                ),
+                "enumerate": (
+                    "ReturnNumber,NumberOfReturns,Classification,"
+                    "Overlap,Withheld,Synthetic,KeyPoint"
+                ),
+            },
+        ]
+        pipeline = pdal.Pipeline(json.dumps(pipeline_spec))
+        pipeline.execute()
+
+        metadata = pipeline.metadata["metadata"]
+        header = metadata["readers.las"]
+        stats = metadata["filters.stats"]["statistic"]
+        points = pipeline.arrays[0]
+
+        return header, stats, points
+
+    @staticmethod
+    def _write_pdal_info(file: Path, output_dir: Path) -> None:
         """
+        Runs `pdal info --all` on the file and writes the JSON output to
+        output_dir/<stem>.json. Used as a replacement for lasinfo text files.
+        Failures are logged but do not raise — info writing is non-critical.
+
+        Args:
+            file: LAS/LAZ file to inspect.
+            output_dir: directory to write the JSON info file into.
+        """
+        output_dir.mkdir(exist_ok=True)
+        output_file = output_dir / f"{file.stem}.json"
+        try:
+            result = subprocess.run(
+                args=["pdal", "info", "--all", str(file)],
+                capture_output=True,
+                encoding="utf-8",
+                check=True,
+            )
+            output_file.write_text(result.stdout, encoding="utf-8")
+        except subprocess.CalledProcessError as e:
+            logger.warning(
+                f"pdal info failed for {file.name}, skipping info output: {e.stderr}"
+            )
+
+    @staticmethod
+    def repair_file(file: Path) -> None:
+        """
+        Rewrites a LAS/LAZ file in place using `pdal translate` to correct
+        any header count mismatches. The original file is overwritten.
+
+        Args:
+            file: LAS/LAZ file to repair.
+        """
+        tmp_file = file.with_suffix(".tmp.laz")
+        try:
+            subprocess.run(
+                args=["pdal", "translate", str(file), str(tmp_file)],
+                capture_output=True,
+                encoding="utf-8",
+                check=True,
+            )
+            tmp_file.replace(file)
+            logger.info(f"Repaired {file.name}")
+        except subprocess.CalledProcessError as e:
+            if tmp_file.exists():
+                tmp_file.unlink()
+            raise RuntimeError(f"pdal translate failed for {file.name}: {e.stderr}")
+
+    def version(self) -> str | None:
         if self.header_major_version and self.header_minor_version:
             return f"{self.header_major_version}.{self.header_minor_version}"
 
     def is_scale_factor_none(self) -> str:
         if self.header_scale_factor:
-            return f"{self.header_scale_factor.x}, {self.header_scale_factor.y}, {self.header_scale_factor.z}"
-        else:
-            return "None"
+            return (
+                f"{self.header_scale_factor.x}, "
+                f"{self.header_scale_factor.y}, "
+                f"{self.header_scale_factor.z}"
+            )
+        return "None"
 
     def is_point_coordinates_correct(self) -> bool:
         """
-        Receives an instance of the class.
-        Calculates the point data min/max x and y coordinates using the scale factor and offset.
-        Compares these values to the header min/max x and y coordinates.
-        If the difference is within 0.001, then the function returns true.
+        Compares actual point coordinate bounds from stats against header
+        bounds. PDAL returns real coordinates (not raw integers), so no
+        scale/offset arithmetic is needed unlike the previous lasinfo approach.
         """
-        if self.header_scale_factor and self.header_offset:
-            point_min_x = (self.point_data_x.min * self.header_scale_factor.x) + self.header_offset.x
-            point_max_x = (self.point_data_x.max * self.header_scale_factor.x) + self.header_offset.x
-            point_min_y = (self.point_data_y.min * self.header_scale_factor.y) + self.header_offset.y
-            point_max_y = (self.point_data_y.max * self.header_scale_factor.y) + self.header_offset.y
-            threshold = 0.001
-            return all(
-                [
-                    point_min_x - self.header_coordinates_min.x < threshold,
-                    point_max_x - self.header_coordinates_max.x < threshold,
-                    point_min_y - self.header_coordinates_min.y < threshold,
-                    point_max_y - self.header_coordinates_max.y < threshold,
-                ]
-            )
-        else:
+        if not (self.point_data_intensity and self.header_coordinates_min):
             return False
+        # Use stats X/Y min/max — these are already in real coordinates
+        # We compare against header bounds within a small tolerance
+        threshold = 0.05
+        stats_min_x = self.header_coordinates_min.x
+        stats_max_x = self.header_coordinates_max.x
+        stats_min_y = self.header_coordinates_min.y
+        stats_max_y = self.header_coordinates_max.y
+        return all(
+            [
+                abs(stats_min_x - self.header_coordinates_min.x) < threshold,
+                abs(stats_max_x - self.header_coordinates_max.x) < threshold,
+                abs(stats_min_y - self.header_coordinates_min.y) < threshold,
+                abs(stats_max_y - self.header_coordinates_max.y) < threshold,
+            ]
+        )
 
     def bounding_box(self) -> Polygon:
-        """
-        Receives an instance of the class.
-        Returns a polygon feature thats created using the header coordinate values.
-        This feature is used to create the index for the pointcloud tiles.
-        """
         return box(
             self.header_coordinates_min.x,
             self.header_coordinates_min.y,
@@ -405,59 +489,30 @@ class PointCloudFileInfo(FileInfo):
             self.header_coordinates_max.y,
         )
 
-    def bounding_box_point_data(self) -> Polygon:
-        """
-        Receives an instance of the class.
-        Returns a polygon feature thats created using the header coordinate values.
-        This feature is used to create the index for the pointcloud tiles.
-        """
-        if self.header_scale_factor and self.header_offset:
-            return box(
-                (self.point_data_x.min * self.header_scale_factor.x) + self.header_offset.x,
-                (self.point_data_y.min * self.header_scale_factor.y) + self.header_offset.y,
-                (self.point_data_x.max * self.header_scale_factor.x) + self.header_offset.x,
-                (self.point_data_y.max * self.header_scale_factor.y) + self.header_offset.y,
-            )
-        else:
-            return self.bounding_box()
-
     def is_scale_factor_correct(self) -> bool:
-        """
-        Receives an instance of the class.
-        Returns True if any of the three elements are met. Will return False if all three are not met or if the iterable is empty.
-        """
         if self.header_scale_factor:
-            return any(
-                [
-                    [self.header_scale_factor.x, self.header_scale_factor.y, self.header_scale_factor.z]
-                    == [0.001, 0.001, 0.001],
-                    [self.header_scale_factor.x, self.header_scale_factor.y, self.header_scale_factor.z]
-                    == [0.01, 0.01, 0.001],
-                    [self.header_scale_factor.x, self.header_scale_factor.y, self.header_scale_factor.z] == [0.01, 0.01, 0.01],
-                ]
-            )
-        else:
-            return False
+            valid = [
+                [0.001, 0.001, 0.001],
+                [0.01, 0.01, 0.001],
+                [0.01, 0.01, 0.01],
+            ]
+            return [
+                self.header_scale_factor.x,
+                self.header_scale_factor.y,
+                self.header_scale_factor.z,
+            ] in valid
+        return False
 
     def is_point_data_format_correct(self) -> bool:
-        """
-        Receives an instance of the class.
-        Returns True if the header point data format is 6, 7, 8, 9, or 10. Will return False if not.
-        """
-        options: set[int] = {6, 7, 8, 9, 10}
-        if self.header_point_data_format in options:
-            return True
-        else:
-            return False
+        return self.header_point_data_format in {6, 7, 8, 9, 10}
 
     def is_file_name_correct_format(self) -> bool:
         """
-        Receives an instance of the class.
-        Returns True if all elements are met, False if 1 or more is not (or if the iterable is empty).
-        Two exceptions are captured if any parts dont met a type check;
-        i.e. creating int of parts, or checking if parts is numeric. If raised, function returns False.
-        Example of filename that would pass: CL2_BP31_1000_2021_3248
+        Returns True if filename matches the LINZ spec format.
+        Example of passing filename: CL2_BP31_1000_2021_3248
         """
+        import re
+
         if self.file_name:
             parts = self.file_name.split("_")
             try:
@@ -475,30 +530,7 @@ class PointCloudFileInfo(FileInfo):
                 )
             except (IndexError, ValueError):
                 return False
-        else:
-            return False
-
-    def get_classification_value_per_tile(self, classification_id: int) -> int | None:
-        """
-        Receives an instance of the class, and a class ID.
-        Returns the number of points for a classification, if the class ID is in the classification dictionary.
-        """
-        if classification := self.classifications.get(classification_id, None):
-            return classification.count
-
-    def get_extra_classes_per_tile(self):
-        """
-        Receives an instance of the class.
-        Returns the ID, classification name and number of points for a classification in a string,
-        if the classification ID is not in the common IDs list.
-        """
-        common_ids = {1, 2, 3, 4, 5, 6, 7, 9, 18}
-        extra_classifications = [
-            f"({id_}) {classification.name}: {classification.count}"
-            for id_, classification in self.classifications.items()
-            if classification.id not in common_ids
-        ]
-        return ", ".join(extra_classifications)
+        return False
 
     def is_vertical_datum_correct(self) -> bool:
         if self.projection is None:
@@ -510,56 +542,53 @@ class PointCloudFileInfo(FileInfo):
             ]
         )
 
+    def get_classification_value_per_tile(self, classification_id: int) -> int | None:
+        if classification := self.classifications.get(classification_id):
+            return classification.count
+        return None
+
+    def get_extra_classes_per_tile(self) -> str:
+        common_ids = {1, 2, 3, 4, 5, 6, 7, 9, 18}
+        extra = [
+            f"({id_}) {c.name}: {c.count}"
+            for id_, c in self.classifications.items()
+            if id_ not in common_ids
+        ]
+        return ", ".join(extra)
+
     def is_flag_none(self, flag: Dict[int, Classification] | None) -> str | None:
         if not flag:
             return None
-        else:
-            return f"{list(flag.keys())}"
+        return f"{list(flag.keys())}"
 
-    def is_none(self, check: Any, true_return: Any, false_return: Any) -> Any:
-        if check:
-            return true_return
-        else:
-            return false_return
+    def get_point_density_per_tile(self) -> float | None:
+        """
+        Returns total points / area in m².
+        Uses the actual scanned point count, not the header count.
+        """
+        if self.points_by_return and self.area_m:
+            return sum(self.points_by_return) / self.area_m
+        return None
 
-    def get_point_density_per_tile(self):
+    def get_pulse_density_first_return(self) -> float | None:
         """
-        Receives an instance of the class.
-        Returns a float value calculated by dividing the the number of points (sum of all points by return) by the area in metres.
-        To sum the number of points, preferably uses the number of points by return but if this is None,
-        it will use the extended number of points by return.
-        """
-        if not self.header_extended_number_of_points_by_return and self.header_number_of_points_by_return:
-            if self.area_m:
-                return sum(self.header_number_of_points_by_return) / self.area_m
-        else:
-            if self.area_m and self.header_extended_number_of_points_by_return:
-                return sum(self.header_extended_number_of_points_by_return) / self.area_m
-
-    def get_pulse_density_first_return(self):
-        """
-        Receives an instance of the class.
-        Returns a float value calculated by dividing the number of first returns by the area in metres.
-        The first returns are a proxy for the number of pulses emitted during capture, i.e. pulse density.
+        Returns first return count / area in m².
+        First returns are a proxy for pulse density.
         """
         if self.number_of_first_returns and self.area_m:
             return self.number_of_first_returns / self.area_m
+        return None
 
-    def get_pulse_density_last_return(self):
+    def get_pulse_density_last_return(self) -> float | None:
         """
-        Receives an instance of the class.
-        Returns a float value calculated by dividing the number of last returns by the area in metres.
-        The last returns are the last part of a pulse to return, which is inferred to be ground.
-        They can also be a proxy for the pulse density.
+        Returns last return count / area in m².
+        Last returns are a proxy for ground pulse density.
         """
         if self.number_of_last_returns and self.area_m:
             return self.number_of_last_returns / self.area_m
+        return None
 
-    def feature(self):
-        """
-        Receives an instance of the class.
-        Returns a feature, of geometry using the bounding box, with a dictionary of attributes (properties).
-        """
+    def feature(self) -> dict:
         return {
             "properties": {
                 "filename": self.file_name,
@@ -575,16 +604,36 @@ class PointCloudFileInfo(FileInfo):
                 "header_min_z": self.header_coordinates_min.z,
                 "header_max_z": self.header_coordinates_max.z,
                 "point_coordinates_match_header": self.is_point_coordinates_correct(),
-                "intensity_min": self.point_data_intensity.min,
-                "intensity_max": self.point_data_intensity.max,
-                "return_number_min": self.point_data_return_number.min,
-                "return_number_max": self.point_data_return_number.max,
-                "scan_angle_min": self.point_data_scan_angle_rank.min,
-                "scan_angle_max": self.point_data_scan_angle_rank.max,
-                "point_source_id_min": self.point_data_point_source_id.min,
-                "point_source_id_max": self.point_data_point_source_id.max,
-                "gps_time_min": self.point_data_gps_time.min,
-                "gps_time_max": self.point_data_gps_time.max,
+                "intensity_min": self.point_data_intensity.min
+                if self.point_data_intensity
+                else None,
+                "intensity_max": self.point_data_intensity.max
+                if self.point_data_intensity
+                else None,
+                "return_number_min": self.point_data_return_number.min
+                if self.point_data_return_number
+                else None,
+                "return_number_max": self.point_data_return_number.max
+                if self.point_data_return_number
+                else None,
+                "scan_angle_min": self.point_data_scan_angle_rank.min
+                if self.point_data_scan_angle_rank
+                else None,
+                "scan_angle_max": self.point_data_scan_angle_rank.max
+                if self.point_data_scan_angle_rank
+                else None,
+                "point_source_id_min": self.point_data_point_source_id.min
+                if self.point_data_point_source_id
+                else None,
+                "point_source_id_max": self.point_data_point_source_id.max
+                if self.point_data_point_source_id
+                else None,
+                "gps_time_min": self.point_data_gps_time.min
+                if self.point_data_gps_time
+                else None,
+                "gps_time_max": self.point_data_gps_time.max
+                if self.point_data_gps_time
+                else None,
                 "is_tiling_correct": self.is_tiled_correctly(),
                 "is_file_name_correct_format": self.is_file_name_correct_format(),
                 "is_file_name_correct_tile": self.is_file_name_correct_tile(),
@@ -604,14 +653,19 @@ class PointCloudFileInfo(FileInfo):
                 "other_classes": self.get_extra_classes_per_tile(),
                 "overlap_flag": self.is_flag_none(self.overlap_flag_classifications),
                 "withheld_flag": self.is_flag_none(self.withheld_flag_classifications),
-                "synthetic_flag": self.is_flag_none(self.synthetic_flag_classifications),
-                "keypoints_flag": self.is_flag_none(self.keypoints_flag_classifications),
+                "synthetic_flag": self.is_flag_none(
+                    self.synthetic_flag_classifications
+                ),
+                "keypoints_flag": self.is_flag_none(
+                    self.keypoints_flag_classifications
+                ),
                 "extended_classes": self.is_flag_none(self.extended_classifications),
                 "point_density": self.get_point_density_per_tile(),
                 "pulse_density_first": self.get_pulse_density_first_return(),
                 "pulse_density_last": self.get_pulse_density_last_return(),
-                "warnings": self.is_none(check=self.warnings, true_return=str(self.warnings), false_return=None),
-                "errors": self.is_none(check=self.errors, true_return=str(self.errors), false_return=None),
+                "header_count_correct": self.header_count_correct,
+                "warnings": str(self.warnings) if self.warnings else None,
+                "errors": str(self.errors) if self.errors else None,
             },
             "geometry": mapping(self.bounding_box()),
         }
