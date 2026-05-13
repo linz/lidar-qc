@@ -48,15 +48,21 @@ def difference_raster(
     """
     logger = configure_logging(verbose, log_file)
     start_time = start_timer()
-    dem_files: dict[str, Path] = {file.stem[4:]: file for file in dem_dir.glob("*.tif")}
-    dsm_files: dict[str, Path] = {file.stem[4:]: file for file in dsm_dir.glob("*.tif")}
+    dem_files: dict[str, Path] = {
+        file.stem[4:]: file for file in dem_dir.glob("*.[tT][iI][fF]*")
+    }
+    dsm_files: dict[str, Path] = {
+        file.stem[4:]: file for file in dsm_dir.glob("*.[tT][iI][fF]*")
+    }
     files: list[tuple[Path, Path]] = []
     for basename, dem_path in dem_files.items():
         try:
             if dsm_path := dsm_files[basename]:
                 files.append((dem_path, dsm_path))
         except:
-            logger.error(f"{dem_path.stem} did not correspond to any DSM file in {dsm_dir}, tile will not be processed.")
+            logger.error(
+                f"{dem_path.stem} did not correspond to any DSM file in {dsm_dir}, tile will not be processed."
+            )
     subfolder = dem_dir / Path("difference_raster")
     subfolder.mkdir(exist_ok=True, parents=True)
     start_message = f"Creating differencing raster now for {len(files)}/{len(dem_files.keys())} DEM files..."
@@ -73,11 +79,19 @@ def difference_raster(
     if errors:
         error_file = subfolder / f"difference_processing_errors.csv"
         write_errors_csv(errors=errors, output_file=error_file)
-        logger.error(f"{len(errors)} errors while creating differencing rasters, writing errors to {error_file.name}")
-    if len([subfolder.glob("*.tif")]) == 0:
+        logger.error(
+            f"{len(errors)} errors while creating differencing rasters, writing errors to {error_file.name}"
+        )
+    if len([subfolder.glob(".[tT][iI][fF]*")]) == 0:
         logger.error(f"No difference raster files created, skipping building vrt")
     else:
-        build_vrt(input_dir=[subfolder], verbose=verbose, log_file=log_file, logger_=logger, called_from_cli=False)
+        build_vrt(
+            input_dir=[subfolder],
+            verbose=verbose,
+            log_file=log_file,
+            logger_=logger,
+            called_from_cli=False,
+        )
         style_file = Path(__file__).parents[2] / f"layer_styles/difference_raster.qml"
         if style_file.exists():
             vrt_folder = subfolder / "vrt"

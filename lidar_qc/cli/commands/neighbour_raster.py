@@ -38,7 +38,9 @@ def neighbour_raster(
     for folder in input_dir:
         subfolder = Path(folder / f"neighbour_raster")
         files: list[Path] | None = validate_script_progress(
-            input_files=list(folder.glob("*.tif")), output_dir=subfolder, item=folder.stem
+            input_files=list(folder.glob("*.[tT][iI][fF]*")),
+            output_dir=subfolder,
+            item=folder.stem,
         )
         if not files:
             continue
@@ -60,7 +62,15 @@ def neighbour_raster(
                 f"{len(errors)} errors while creating {folder.stem} density rasters, writing errors to {error_file.name}"
             )
         if len([subfolder.glob("*.tif")]) == 0:
-            logger.error(f"No {folder.stem} density raster files created, skipping building vrt")
+            logger.error(
+                f"No {folder.stem} density raster files created, skipping building vrt"
+            )
         else:
-            build_vrt(input_dir=[subfolder], verbose=verbose, log_file=log_file, logger_=logger, called_from_cli=False)
+            build_vrt(
+                input_dir=[subfolder],
+                verbose=verbose,
+                log_file=log_file,
+                logger_=logger,
+                called_from_cli=False,
+            )
     end_timer(start_time)
