@@ -1,7 +1,7 @@
 import re
 from enum import Enum
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Tuple, Union
+from typing import Any, Dict, Union
 
 from pydantic import ValidationError
 from shapely.geometry import Polygon, box, mapping
@@ -27,8 +27,9 @@ class RasterFileInfo(FileInfo):
     Child dataclass of FileInfo which stores metadata information from a raster file by parsing the output of gdalinfo.
     Returns the dataclass instance for the file.
     """
+
     file_type = "Raster"
-    glob_pattern = "*.tif"
+    glob_pattern = "*.[tT][iI][fF]*"
     summarise_func = summarise_raster_product
     _schema = {
         "geometry": "Polygon",
@@ -66,7 +67,9 @@ class RasterFileInfo(FileInfo):
     min_pixel_value: float
 
     @classmethod
-    def from_file(cls, file: Path, supplied_tile_index_file: Path | None) -> "RasterFileInfo":
+    def from_file(
+        cls, file: Path, supplied_tile_index_file: Path | None
+    ) -> "RasterFileInfo":
         """
         This function runs gdalinfo in a subprocess and saves the result using standard out.
         The output is a series of dictionaries due to -json argument,
@@ -151,7 +154,12 @@ class RasterFileInfo(FileInfo):
         try:
             return cls(**data)
         except ValidationError as err:
-            error_fields = "; ".join([f'field:{e["loc"][0]}, value:{e["input"]}, message:{e["msg"]}' for e in err.errors()])
+            error_fields = "; ".join(
+                [
+                    f"field:{e['loc'][0]}, value:{e['input']}, message:{e['msg']}"
+                    for e in err.errors()
+                ]
+            )
             raise ValueError(error_fields)
 
     def bounding_box(self) -> Polygon:
@@ -167,7 +175,7 @@ class RasterFileInfo(FileInfo):
             self.coordinates_lower_right.x,
             self.coordinates_upper_left.y,
         )
-    
+
     def centroid(self):
         return self.bounding_box.centroid()
 
