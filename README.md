@@ -1,9 +1,5 @@
 # Toitū Te Whenua LINZ LiDAR QC Application
-linz-lidar-qc is a command line application that consists of tools to aid in quality checking LiDAR data, created by Toitū Te Whenua Land Information New Zealand. Currently only works in Windows operating system.
-
-## LAStools executables must be accessible to the application:
-Add the LAStools bin directory to your system PATH (e.g. C:\LAStools\bin), or
-Set the LASTOOLS_BIN environment variable to your LAStools bin directory (e.g. LASTOOLS_BIN=C:\LAStools\bin)
+linz-lidar-qc is a command line application that consists of tools to aid in quality checking LiDAR data, created by Toitū Te Whenua Land Information New Zealand. Currently only works on Windows operating systems.
 
 ## Installation
 Store code locally and install Anaconda. 
