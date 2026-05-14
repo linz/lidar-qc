@@ -2,7 +2,7 @@ from pathlib import Path
 
 import numpy as np
 import rasterio
-from scipy import ndimage
+from scipy.ndimage import maximum_filter, minimum_filter
 
 
 def calculate_focal_range(subarr):
@@ -14,15 +14,15 @@ def calculate_focal_range(subarr):
 
 
 def create_neighbour_raster(file: Path, output_dir: Path) -> None:
-    """
-    The input raster file is opened with rasterio and read to a numpy.ndarray type.
-    This array is run through a filter which uses a moving 3x3 kernel window to find the range
-    between pixels and their neighbours, across the array.
-    The filtered array is written to a tif output using rasterio.
-    """
-    src = rasterio.open(file)
-    src_arr = src.read(1)
-    range_arr = ndimage.generic_filter(input=src_arr, function=calculate_focal_range, footprint=np.ones((3, 3)))
+    with rasterio.open(file) as src:
+        src_arr = src.read(1).astype(np.float32)
+        transform = src.transform
+
+    footprint = np.ones((3, 3))
+    range_arr = maximum_filter(src_arr, footprint=footprint) - minimum_filter(
+        src_arr, footprint=footprint
+    )
+
     with rasterio.open(
         f"{output_dir / file.name}",
         "w",
@@ -30,8 +30,9 @@ def create_neighbour_raster(file: Path, output_dir: Path) -> None:
         width=src_arr.shape[1],
         height=src_arr.shape[0],
         count=1,
+        compress="lzw",
         crs=rasterio.CRS.from_epsg(2193),
-        transform=src.transform,
+        transform=transform,
         dtype=src_arr.dtype,
         nodata=-9999,
     ) as dst:
