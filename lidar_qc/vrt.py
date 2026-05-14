@@ -1,12 +1,11 @@
 import json
 import subprocess
 from pathlib import Path
-from typing import Any, Generator, List
+from typing import Any, List
 
 from lidar_qc.log import get_logger
 
 logger = get_logger()
-
 
 
 def child_vrt_filepaths(vrt_dir: Path, ras_dir: Path) -> dict[Any, Any]:
@@ -16,7 +15,9 @@ def child_vrt_filepaths(vrt_dir: Path, ras_dir: Path) -> dict[Any, Any]:
     where the key is the child vrt path and name, and the value is a list of raster file paths (max 300).
     Returns the dictionary described above.
     """
-    tifs = sorted(f for ext in ("*.tif", "*.tiff", "*.TIF", "*.TIFF") for f in ras_dir.glob(ext))
+    tifs = sorted(
+        f for ext in ("*.tif", "*.tiff", "*.TIF", "*.TIFF") for f in ras_dir.glob(ext)
+    )
     child_vrts = {}
     child_vrt_name = 0
     increment_list = []
@@ -27,9 +28,13 @@ def child_vrt_filepaths(vrt_dir: Path, ras_dir: Path) -> dict[Any, Any]:
             for tif in increment_list:
                 dict_key = str(child_vrt_name)
                 if Path(vrt_dir, (dict_key + ".vrt")) not in child_vrts.keys():
-                    child_vrts[Path(vrt_dir, (dict_key + ".vrt"))] = [Path(ras_dir, tif)]
+                    child_vrts[Path(vrt_dir, (dict_key + ".vrt"))] = [
+                        Path(ras_dir, tif)
+                    ]
                 else:
-                    child_vrts[Path(vrt_dir, (dict_key + ".vrt"))].append(Path(ras_dir, tif))
+                    child_vrts[Path(vrt_dir, (dict_key + ".vrt"))].append(
+                        Path(ras_dir, tif)
+                    )
             increment_list = []
     # If there are less than 300 files, create 1 vrt file path key and assign the tif file paths as values.
     if len(increment_list) < 300:
@@ -39,7 +44,9 @@ def child_vrt_filepaths(vrt_dir: Path, ras_dir: Path) -> dict[Any, Any]:
             if Path(vrt_dir, (dict_key + ".vrt")) not in child_vrts.keys():
                 child_vrts[Path(vrt_dir, (dict_key + ".vrt"))] = [Path(ras_dir, tif)]
             else:
-                child_vrts[Path(vrt_dir, (dict_key + ".vrt"))].append(Path(ras_dir, tif))
+                child_vrts[Path(vrt_dir, (dict_key + ".vrt"))].append(
+                    Path(ras_dir, tif)
+                )
     return child_vrts
 
 
@@ -47,28 +54,23 @@ def gdalinfo(file: Path):
     """
     Runs GDAL tool gdalinfo in a subprocess, using the received path to the input file.
     Raises an exception if subprocess isnt successful.
-    Returns the completed process string formated as json.
+    Returns the completed process string formatted as json.
     """
-    gdalinfo_args = f"gdalinfo -stats -mm -json {file}"
+    gdalinfo_args = ["gdalinfo", "-stats", "-mm", "-json", str(file)]
     try:
-        result = subprocess.run(args=gdalinfo_args, capture_output=True, shell=True, check=True, encoding="utf-8")
+        result = subprocess.run(
+            args=gdalinfo_args,
+            capture_output=True,
+            shell=False,
+            check=True,
+            encoding="utf-8",
+        )
     except Exception as err:
-        ...
         raise err
-    subprocess_output = result.stdout
-    return json.loads(subprocess_output)
+    return json.loads(result.stdout)
 
 
 def gdalbuildvrt(files_txt: Path, files: List, vrt: Path) -> None:
-    """
-    Runs GDAL tool gdalbuildvrt through subprocess.
-    A local text file of filepaths is required for gdalbuildvrt command.
-    This file is unlinked after process.
-    Args:
-        files_txt: path to local text file.
-        files: list of files for vrt.
-        vrt: child vrt file path.
-    """
     with open(files_txt, "w", encoding="utf-8") as f:
         f.write("\n".join([str(file) for file in files]))
     gdalbuildvrt_args = [
@@ -85,13 +87,19 @@ def gdalbuildvrt(files_txt: Path, files: List, vrt: Path) -> None:
         str(vrt),
     ]
     try:
-        result = subprocess.run(args=gdalbuildvrt_args, capture_output=True, shell=True, encoding="utf-8", check=True)
+        result = subprocess.run(
+            args=gdalbuildvrt_args,
+            capture_output=True,
+            shell=False,
+            encoding="utf-8",
+            check=True,
+        )
         if result.stderr:
-            print(f"Subprocess Error: {result.stderr}")
+            logger.warning(f"gdalbuildvrt stderr: {result.stderr}")
     except subprocess.CalledProcessError as process_error:
-        print(f"CalledProcessError: {process_error}")
+        logger.error(f"gdalbuildvrt failed: {process_error}")
     except Exception as error:
-        print(f"Syntax/Exception Error: {error}")
+        logger.error(f"gdalbuildvrt error: {error}")
     Path(files_txt).unlink(missing_ok=True)
 
 
@@ -102,7 +110,13 @@ def gdaladdo(vrt: Path) -> None:
     """
     gdaladdo_args = ["gdaladdo", "-r", "nearest", str(vrt), "2", "4", "8", "16"]
     try:
-        result = subprocess.run(args=gdaladdo_args, capture_output=True, shell=True, encoding="utf-8", check=True)
+        result = subprocess.run(
+            args=gdaladdo_args,
+            capture_output=True,
+            shell=True,
+            encoding="utf-8",
+            check=True,
+        )
         if result.stderr:
             print(f"Subprocess Error: {result.stderr}")
     except subprocess.CalledProcessError as process_error:
@@ -128,7 +142,11 @@ def create_child_vrt(child_vrts: dict, vrt_dir: Path, ras_dir: Path) -> List[Any
     """
     for vrt, files in child_vrts.items():
         # files_txt_path = Path(vrt_dir).joinpath(Path(vrt).stem + ".txt")
-        gdalbuildvrt(files_txt=Path(vrt_dir).joinpath(Path(vrt).stem + ".txt"), files=files, vrt=vrt)
+        gdalbuildvrt(
+            files_txt=Path(vrt_dir).joinpath(Path(vrt).stem + ".txt"),
+            files=files,
+            vrt=vrt,
+        )
     remove_files(ras_dir, "*.xml")
     return list(vrt_dir.glob("*.vrt"))
 
@@ -142,7 +160,9 @@ def create_main_vrt(child_vrts: List[Path], vrt_dir: Path, ras_dir: Path) -> Non
     """
     if len(child_vrts) > 1:
         gdalbuildvrt(
-            files_txt=Path(vrt_dir, f"{ras_dir.stem}.txt"), files=child_vrts, vrt=Path(vrt_dir, f"{ras_dir.stem}.vrt")
+            files_txt=Path(vrt_dir, f"{ras_dir.stem}.txt"),
+            files=child_vrts,
+            vrt=Path(vrt_dir, f"{ras_dir.stem}.vrt"),
         )
         remove_files(ras_dir, "*.xml")
         gdaladdo(vrt=Path(vrt_dir, f"{ras_dir.stem}.vrt"))
