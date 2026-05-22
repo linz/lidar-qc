@@ -91,21 +91,36 @@ linz-lidar-qc psid --input H:\lidar-dataset\Raw\Point_cloud --output H:\lidar-da
 ```
 
 ### rename
-Rename DEM, DSM or Point Cloud files in accordance with section 9.2 in the New Zealand National Aerial LiDAR Base Specification. 
+Rename DEM, DSM or Point Cloud files in accordance with section 9.2 in the New Zealand National Aerial LiDAR Base Specification.  
 This function runs as a dry run initially until `--write` is passed. It renames the existing files and does not make a copy.
 
-Basic usage:
-`--input` is the path to the directory containing subfolders of raster and point cloud files. ``--year` is the start year of the survey. `--write` confirms the overwrite. `--limit` limit the amount of files the dry-run is run against.
+It will automatically determine the correct tile scale (1000 or 500) for each file based on its geometry.
+
+If an output location is provided, the renamed files will be placed in a subdirectory matching the original folder name. 
+
+Basic usage:  
+`--input` is the path to a directory containing raster or point cloud files. It can be speicifed multiple times if more than one directory for a survey needs to be renamed. `--year` is the start year of the survey. `--write` confirms the overwrite. `--limit` limits the number of files the dry-run is run against.
 
 Run a dry-run on 100 files:
 ```bash
 linz-lidar-qc rename --input H:\lidar-dataset\Processed --year 2020 --limit 100
 ```
 
-To rename files:
+To rename files in a single directory:
 ```bash
 linz-lidar-qc rename --input H:\lidar-dataset\Processed --year 2020 --write
 ```
+
+To rename files in multiple directories:
+```bash
+linz-lidar-qc rename --input H:\lidar-dataset\dem --input H:\lidar-dataset\point-clouds --input H:\lidar-dataset\dsm --year 2025 --write
+```
+
+To rename files to a new location while preserving the original subdirectory:
+```bash
+linz-lidar-qc rename --input H:\lidar-dataset\Processed --output H:\lidar-dataset\Renamed --year 2020 --write
+```
+This will place renamed files from e.g. `Processed\DEM\file.tif` into `Renamed\DEM\newname.tif`.
 
 
 
