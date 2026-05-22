@@ -94,11 +94,33 @@ def create_all_rasters_per_tile_pdal(
     The LAZ file is read and decompressed once, with each filter written as a
     separate writers.gdal stage. This avoids redundant decompression when
     multiple density products are requested for the same tile.
+    Bounds are explicitly set from the tile header so that tiles with zero
+    points matching a filter still produce a valid output raster filled with
+    nodata rather than raising a grid width error.
     Args:
         input_file: tile to process.
         output_dirs: mapping of filter value string to its output directory.
         filters: which filters to run for this tile.
     """
+    # Read header bounds first using a metadata-only pipeline
+    # This is fast — no point data is read
+    header_pipeline = pdal.Pipeline(
+        json.dumps(
+            [
+                {
+                    "type": "readers.las",
+                    "filename": str(input_file),
+                    "count": 0,  # read header only, no points
+                }
+            ]
+        )
+    )
+    header_pipeline.execute()
+    header = header_pipeline.metadata["metadata"]["readers.las"]
+    bounds = (
+        f"([{header['minx']}, {header['maxx']}], [{header['miny']}, {header['maxy']}])"
+    )
+
     pipeline_spec: list[dict] = [
         {
             "type": "readers.las",
@@ -125,6 +147,7 @@ def create_all_rasters_per_tile_pdal(
             "dimension": dimension,
             "output_type": output_type,
             "filename": str(output_file),
+            "bounds": bounds,
         }
 
         where_statement = DENSITY_FILTER_WHERE_STATEMENTS[filter_]
