@@ -11,9 +11,7 @@ from shapely.strtree import STRtree
 from lidar_qc.index_tiles import TileIndex, TileIndexScale
 from lidar_qc.log import get_logger
 
-official_tile_index = TileIndex(TileIndexScale.scale_1000)
 logger = get_logger()
-
 
 _strtrees: Dict[Path, STRtree] = {}
 
@@ -68,6 +66,9 @@ class FileInfo(BaseModel):
     def bounding_box(self) -> Polygon:  # type: ignore
         pass
 
+    def coords(self) -> tuple[float, float, float, float]:  # type: ignore
+        pass
+
     def is_file_name_correct_format(self) -> bool:  # type: ignore
         pass
 
@@ -95,6 +96,11 @@ class FileInfo(BaseModel):
         Returns True if the file name mapsheet and tile number match the official 1k tile, False if either one doesn't match.
         """
         try:
+            scale = self.get_tile_scale()
+            if scale == 1000:
+                official_tile_index = TileIndex(TileIndexScale.scale_1000)
+            elif scale == 500:
+                official_tile_index = TileIndex(TileIndexScale.scale_500)
             official_tile = official_tile_index.get_tile_from_point(
                 self.bounding_box().centroid
             )
@@ -115,6 +121,11 @@ class FileInfo(BaseModel):
         Returns False if the geometries don't match.
         """
         try:
+            scale = self.get_tile_scale()
+            if scale == 1000:
+                official_tile_index = TileIndex(TileIndexScale.scale_1000)
+            elif scale == 500:
+                official_tile_index = TileIndex(TileIndexScale.scale_500)
             official_tile = official_tile_index.get_tile_from_point(
                 self.bounding_box().centroid
             )
@@ -168,6 +179,12 @@ class FileInfo(BaseModel):
         Returns official tile if within tile scheme.
         """
         try:
+
+            scale = self.get_tile_scale()
+            if scale == 1000:
+                official_tile_index = TileIndex(TileIndexScale.scale_1000)
+            elif scale == 500:
+                official_tile_index = TileIndex(TileIndexScale.scale_500)
             official_tile = official_tile_index.get_tile_from_point(
                 self.bounding_box().centroid
             )
@@ -175,6 +192,22 @@ class FileInfo(BaseModel):
             logger.error(f"{self.file_name} is outside tile scheme")
 
         return official_tile
+
+    def get_tile_scale(self) -> int:
+        """
+        Determines the tile scale (1000 or 500) from the bounding box size.
+        Uses self.coords() to get (minx, miny, maxx, maxy).
+        Returns 1000 for width=480 and height=720, 500 for width=240 and height=360.
+        """
+        minx, miny, maxx, maxy = self.coords()
+        width = abs(maxx - minx)
+        height = abs(maxy - miny)
+        if abs(width - 480) < 1 and abs(height - 720) < 1:
+            return 1000
+        elif abs(width - 240) < 1 and abs(height - 360) < 1:
+            return 500
+        else:
+            raise ValueError(f"Unknown tile scale for width={width}, height={height}")
 
     @staticmethod
     def _get_spatial_index(vector_file: Path):

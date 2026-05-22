@@ -13,7 +13,6 @@ from lidar_qc.log import get_logger
 from lidar_qc.vrt import gdalinfo
 
 logger = get_logger()
-official_tile_index = TileIndex(TileIndexScale.scale_1000)
 
 
 class RasterProductType(Enum):
@@ -170,6 +169,18 @@ class RasterFileInfo(FileInfo):
         This feature is used to create the index for the pointcloud tiles.
         """
         return box(
+            self.coordinates_upper_left.x,
+            self.coordinates_lower_right.y,
+            self.coordinates_lower_right.x,
+            self.coordinates_upper_left.y,
+        )
+
+    def coords(self) -> tuple[float, float, float, float]:
+        """
+        Returns the bounding box coordinates:
+        (upper_left_x, lower_right_y, lower_right_x, upper_left_y)
+        """
+        return (
             self.coordinates_upper_left.x,
             self.coordinates_lower_right.y,
             self.coordinates_lower_right.x,
