@@ -1,19 +1,21 @@
 import logging
 import os
 from pathlib import Path
-from typing import Annotated, Any, Optional
+from typing import Annotated, Any, Optional, List
 
 import typer
 
 from lidar_qc.cli.timer import end_timer, start_timer
 from lidar_qc.cli.validations import find_data_subdirs, validate_year
+from lidar_qc.dataset_info.point_cloud_file_info import PointCloudFileInfo
+from lidar_qc.dataset_info.raster_file_info import RasterFileInfo
 from lidar_qc.log import configure_logging
 from lidar_qc.parallel import run_in_parallel
-from lidar_qc.util import rename_file
+from lidar_qc.util import rename_file, get_first_file_extension
 
 
 def rename(
-    input_dir: Path = typer.Option(
+    input_dir: List[Path] = typer.Option(
         ...,
         "--input",
         "-i",
@@ -26,8 +28,20 @@ def rename(
         help="Path to directory containing subfolders of raster and point cloud files",
         show_default=False,
     ),
-    survey_start_year: str = typer.Option(
+    output_dir: Optional[Path] = typer.Option(
         None,
+        "--output",
+        "-o",
+        file_okay=False,
+        dir_okay=True,
+        writable=True,
+        readable=True,
+        resolve_path=True,
+        help="Path to directory to output renamed files to. If not stated, files will be renamed in place.",
+        show_default=False,
+    ),
+    survey_start_year: str = typer.Option(
+        ...,
         "--year",
         "-y",
         prompt_required=True,
@@ -77,7 +91,22 @@ def rename(
             "To execute rename, use --write"
         )
 
-    raw_data_dirs = find_data_subdirs(input_dir, [], [])
+    if output_dir and write:
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+    # Loop through the list of input directories.
+    # Establish if the directory contains rasters or point clouds by
+    # checking the extension of the first file found in the directory.
+    raw_data_dirs = []
+    for path in input_dir:
+        if not path.is_dir():
+            logger.error(f"{path} is not a directory")
+            return
+        first_file_extension = get_first_file_extension(path)
+        if first_file_extension in [".laz", ".las"]:
+            raw_data_dirs.append((path, PointCloudFileInfo))
+        elif first_file_extension in [".tif", ".tiff", ".TIF", ".TIFF"]:
+            raw_data_dirs.append((path, RasterFileInfo))
 
     for raw_data_dir, cls in raw_data_dirs:
         files: list[Path] = list(raw_data_dir.glob(cls.glob_pattern))
@@ -110,16 +139,22 @@ def rename(
                 product_type = (
                     file_info.product_type.value
                     if file_info.file_type == "Raster"
-                    else "CL2"
-                    if file_info.file_type == "PointCloud"
-                    else None
+                    else "CL2" if file_info.file_type == "PointCloud" else None
                 )
+
+                parent_dir_name = raw_data_dir.name
+
+                if not output_dir:
+                    target_dir = raw_data_dir
+                else:
+                    target_dir = output_dir / parent_dir_name
 
                 current_file_path = os.path.join(
                     raw_data_dir, file_info.file_name + file_info.file_extension
                 )
+
                 new_file_path = os.path.join(
-                    raw_data_dir,
+                    target_dir,
                     product_type
                     + "_"
                     + official_tile["sheet_code_id"]
@@ -145,9 +180,9 @@ def rename(
                         logger.debug(f"{current_tfw_file} --> {new_tfw_file}")
 
                 if write:
-                    rename_file(current_file_path, new_file_path)
+                    rename_file(Path(current_file_path), Path(new_file_path))
                     if tfw:
-                        rename_file(current_tfw_file, new_tfw_file)
+                        rename_file(Path(current_tfw_file), Path(new_tfw_file))
 
     logger.info("Renaming complete")
 

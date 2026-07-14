@@ -20,7 +20,6 @@ from lidar_qc.index_tiles import TileIndex, TileIndexScale
 from lidar_qc.log import get_logger
 
 logger = get_logger()
-official_tile_index = TileIndex(TileIndexScale.scale_1000)
 
 # Standard LAS classification names by code
 CLASSIFICATION_NAMES: dict[int, str] = {
@@ -483,6 +482,18 @@ class PointCloudFileInfo(FileInfo):
 
     def bounding_box(self) -> Polygon:
         return box(
+            self.header_coordinates_min.x,
+            self.header_coordinates_min.y,
+            self.header_coordinates_max.x,
+            self.header_coordinates_max.y,
+        )
+
+    def coords(self) -> tuple[float, float, float, float]:
+        """
+        Returns the bounding box coordinates:
+        (upper_left_x, lower_right_y, lower_right_x, upper_left_y)
+        """
+        return (
             self.header_coordinates_min.x,
             self.header_coordinates_min.y,
             self.header_coordinates_max.x,
