@@ -32,7 +32,11 @@
       <resampling zoomedInResamplingMethod="nearestNeighbour" enabled="false" maxOversampling="2" zoomedOutResamplingMethod="nearestNeighbour"/>
     </provider>
     <rasterrenderer nodataColor="" type="singlebandpseudocolor" classificationMin="-0.1" opacity="1" alphaBand="-1" classificationMax="0.1" band="1">
-      <rasterTransparency/>
+      <rasterTransparency>
+        <singleValuePixelList>
+          <pixelListEntry min="0" max="0" percentTransparent="100"/>
+        </singleValuePixelList>
+      </rasterTransparency>
       <minMaxOrigin>
         <limits>None</limits>
         <extent>WholeRaster</extent>

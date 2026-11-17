@@ -76,6 +76,11 @@ To run a series of pre-set density rasters, use the filter 'common'. This will c
 linz-lidar-qc density-raster --input H:\lidar-dataset\Raw\LAZ --filter common
 ```
 
+To create a density raster for every available filter in one run, use the filter 'all'. Each tile is still read only once.
+```bash
+linz-lidar-qc density-raster --input H:\lidar-dataset\Raw\LAZ --filter all
+```
+
 ### psid
 Creates a text file that contains a pointcloud file name and a list of the point source ID's in that file.
 

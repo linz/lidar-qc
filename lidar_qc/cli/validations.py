@@ -9,6 +9,7 @@ import typer
 from lidar_qc.dataset_info.point_cloud_file_info import PointCloudFileInfo
 from lidar_qc.dataset_info.raster_file_info import RasterFileInfo
 from lidar_qc.density_filters import (
+    DENSITY_FILTER_ALL,
     DENSITY_FILTER_COMMON,
     DENSITY_FILTER_COMMON_NO_FLAG,
     DensityFilter,
@@ -96,16 +97,20 @@ def validate_attribute_field(layer: Path, attribute: str) -> bool:
 def validate_filter_args(filter_args: list[DensityFilter]) -> list[str]:
     """
     Receives list of filters input in command line.
-    Refines list if common and common_no_flag filters are used.
-    Returns a list of all filters.
+    Refines list if the all, common and common_no_flag filters are used.
+    Returns a list of all filters, with duplicates removed.
     """
+    if DensityFilter.all in filter_args:
+        filter_args.remove(DensityFilter.all)
+        filter_args.extend(DENSITY_FILTER_ALL)
     if DensityFilter.common in filter_args:
         filter_args.remove(DensityFilter.common)
         filter_args.extend(DENSITY_FILTER_COMMON)
     if DensityFilter.common_no_flag in filter_args:
         filter_args.remove(DensityFilter.common_no_flag)
         filter_args.extend(DENSITY_FILTER_COMMON_NO_FLAG)
-    return [filter_arg.value for filter_arg in filter_args]
+    # dict.fromkeys keeps the first occurrence of each filter, so e.g. "all" plus "ground" runs ground once.
+    return [filter_arg.value for filter_arg in dict.fromkeys(filter_args)]
 
 
 def find_data_subdirs(

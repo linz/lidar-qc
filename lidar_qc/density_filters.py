@@ -16,6 +16,7 @@ class DensityFilter(str, Enum):
 
     common = "common"
     common_no_flag = "common_no_flag"
+    all = "all"
     pulse = "pulse"
     ground = "ground"
     low_veg = "low_veg"
@@ -36,6 +37,12 @@ class DensityFilter(str, Enum):
     high_veg = "high_veg"
     intensity = "intensity"
     bridge = "bridge"
+    water = "water"
+    all_veg_no_flag = "all_veg_no_flag"
+    medium_veg_no_flag = "medium_veg_no_flag"
+    high_veg_no_flag = "high_veg_no_flag"
+    bridge_no_flag = "bridge_no_flag"
+    water_no_flag = "water_no_flag"
 
 
 DENSITY_FILTER_COMMON: list[DensityFilter] = [
@@ -56,26 +63,46 @@ DENSITY_FILTER_COMMON_NO_FLAG: list[DensityFilter] = [
     DensityFilter.noise_no_flag,
 ]
 
-DENSITY_FILTER_WHERE_STATEMENTS: dict[DensityFilter, str | None] = {
-    # || is OR and && is AND
+# Filters that expand to a group of other filters rather than producing a raster themselves.
+DENSITY_FILTER_GROUPS: list[DensityFilter] = [
+    DensityFilter.common,
+    DensityFilter.common_no_flag,
+    DensityFilter.all,
+]
+
+# Every filter that produces a raster, in the order they are declared.
+DENSITY_FILTER_ALL: list[DensityFilter] = [
+    f for f in DensityFilter if f not in DENSITY_FILTER_GROUPS
+]
+
+# || is OR and && is AND
+# Class filters, each of which also has a "<name>_no_flag" version below.
+DENSITY_FILTER_CLASS_WHERE: dict[DensityFilter, str] = {
     DensityFilter.ground: "(Classification == 2)",
     DensityFilter.low_veg: "(Classification == 3)",
+    DensityFilter.medium_veg: "(Classification == 4)",
+    DensityFilter.high_veg: "(Classification == 5)",
+    DensityFilter.all_veg: "(Classification == 3 || Classification == 4 || Classification == 5)",
     DensityFilter.buildings: "(Classification == 6)",
     DensityFilter.unclassified: "(Classification == 1)",
     DensityFilter.noise: "(Classification == 7 || Classification == 18)",
+    DensityFilter.water: "(Classification == 9)",
+    DensityFilter.bridge: "(Classification == 17)",
+}
+
+# "No flag" means the same class with overlap and withheld points removed.
+NO_FLAG_WHERE = "(Overlap == 0 && Withheld == 0)"
+
+DENSITY_FILTER_WHERE_STATEMENTS: dict[DensityFilter, str | None] = {
+    **DENSITY_FILTER_CLASS_WHERE,
+    **{
+        DensityFilter(f"{f.value}_no_flag"): f"({where} && {NO_FLAG_WHERE})"
+        for f, where in DENSITY_FILTER_CLASS_WHERE.items()
+    },
     DensityFilter.point: None,
     DensityFilter.withheld: "(Withheld == 1)",
     DensityFilter.overlap: "(Overlap == 1)",
-    DensityFilter.ground_no_flag: "(Classification == 2 && Overlap == 0)",
-    DensityFilter.low_veg_no_flag: "(Classification == 3 && Overlap == 0)",
-    DensityFilter.buildings_no_flag: "(Classification == 6 && Overlap == 0)",
-    DensityFilter.unclassified_no_flag: "(Classification == 1 && Withheld == 0 && Overlap == 0)",
-    DensityFilter.noise_no_flag: "((Classification == 7 || Classification == 18) && Withheld == 0)",
     DensityFilter.noise_with_withheld: "((Classification == 7 || Classification == 18) && Withheld == 1)",
-    DensityFilter.all_veg: "(Classification == 3 || Classification == 4 || Classification == 5)",
-    DensityFilter.medium_veg: "(Classification == 4)",
-    DensityFilter.high_veg: "(Classification == 5)",
-    DensityFilter.bridge: "(Classification == 17)",
     DensityFilter.intensity: None,
     # Pulse: first returns only, excluding status-flagged points.
     # Mirrors lasgrid: -first_only -drop_withheld -drop_synthetic -drop_keypoint
@@ -141,7 +168,10 @@ def create_all_rasters_per_tile_pdal(
         writer: dict = {
             "type": "writers.gdal",
             "resolution": "1",
-            "radius": "1",
+            # binmode: each cell uses only the points inside that 1 m cell.
+            # Without it PDAL uses every point within a radius of the cell centre,
+            # so neighbouring cells share points and counts come out about 3x too high.
+            "binmode": True,
             "data_type": "Int32",
             "nodata": "-9999",
             "dimension": dimension,
