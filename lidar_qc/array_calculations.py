@@ -13,15 +13,32 @@ def calculate_focal_range(subarr):
     return subarr.max() - subarr.min()
 
 
+NEIGHBOUR_NODATA = -9999
+
+
+def focal_range(arr: np.ndarray, valid: np.ndarray) -> np.ndarray:
+    """
+    Returns the range (max - min) of each cell's 3x3 neighbourhood, using valid cells only.
+    No-data neighbours are ignored rather than included, so cells beside a void
+    are not given a false range of thousands of metres.
+    Cells that are themselves no-data are returned as NEIGHBOUR_NODATA.
+    """
+    footprint = np.ones((3, 3))
+    # Push no-data cells to -inf / +inf so they can never be picked as a max or min.
+    max_arr = maximum_filter(np.where(valid, arr, -np.inf), footprint=footprint)
+    min_arr = minimum_filter(np.where(valid, arr, np.inf), footprint=footprint)
+    # A valid centre cell is always in its own window, so max and min are finite there.
+    return np.where(valid, max_arr - min_arr, NEIGHBOUR_NODATA).astype(np.float32)
+
+
 def create_neighbour_raster(file: Path, output_dir: Path) -> None:
     with rasterio.open(file) as src:
         src_arr = src.read(1).astype(np.float32)
+        # read_masks is 0 for no-data, whatever no-data value the source uses.
+        valid = (src.read_masks(1) > 0) & np.isfinite(src_arr)
         transform = src.transform
 
-    footprint = np.ones((3, 3))
-    range_arr = maximum_filter(src_arr, footprint=footprint) - minimum_filter(
-        src_arr, footprint=footprint
-    )
+    range_arr = focal_range(src_arr, valid)
 
     with rasterio.open(
         f"{output_dir / file.name}",
@@ -33,8 +50,8 @@ def create_neighbour_raster(file: Path, output_dir: Path) -> None:
         compress="lzw",
         crs=rasterio.CRS.from_epsg(2193),
         transform=transform,
-        dtype=src_arr.dtype,
-        nodata=-9999,
+        dtype=range_arr.dtype,
+        nodata=NEIGHBOUR_NODATA,
     ) as dst:
         dst.write(range_arr, 1)
 

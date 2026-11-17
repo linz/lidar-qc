@@ -55,7 +55,7 @@
               <Option name="discrete" value="0" type="QString"/>
               <Option name="rampType" value="gradient" type="QString"/>
               <Option name="spec" value="rgb" type="QString"/>
-              <Option name="stops" value="0.040404;84,116,61,255;rgb;ccw" type="QString"/>
+              <Option name="stops" value="0.040404;30,94,32,255;rgb;ccw" type="QString"/>
             </Option>
             <prop v="186,204,173,255" k="color1"/>
             <prop v="56,77,40,255" k="color2"/>
@@ -63,10 +63,10 @@
             <prop v="0" k="discrete"/>
             <prop v="gradient" k="rampType"/>
             <prop v="rgb" k="spec"/>
-            <prop v="0.040404;84,116,61,255;rgb;ccw" k="stops"/>
+            <prop v="0.040404;30,94,32,255;rgb;ccw" k="stops"/>
           </colorramp>
           <item value="1" alpha="255" label="&lt;= 1" color="#baccad"/>
-          <item value="5" alpha="255" label="1 - 5" color="#54743d"/>
+          <item value="5" alpha="255" label="1 - 5" color="#1e5e20"/>
           <item value="inf" alpha="255" label="> 5" color="#384d28"/>
           <rampLegendSettings maximumLabel="" orientation="2" prefix="" direction="0" useContinuousLegend="1" minimumLabel="" suffix="">
             <numericFormat id="basic">

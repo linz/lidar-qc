@@ -11,32 +11,30 @@
     <provider>
       <resampling zoomedInResamplingMethod="nearestNeighbour" zoomedOutResamplingMethod="nearestNeighbour" enabled="false" maxOversampling="2"/>
     </provider>
-    <rasterrenderer type="singlebandpseudocolor" nodataColor="" alphaBand="-1" opacity="1" classificationMin="0" classificationMax="100" band="1">
+    <rasterrenderer type="singlebandpseudocolor" nodataColor="" alphaBand="-1" opacity="1" classificationMin="0" classificationMax="1" band="1">
       <rasterTransparency/>
       <minMaxOrigin>
         <limits>None</limits>
         <extent>WholeRaster</extent>
         <statAccuracy>Estimated</statAccuracy>
-        <cumulativeCutLower>0</cumulativeCutLower>
-        <cumulativeCutUpper>1</cumulativeCutUpper>
-        <stdDevFactor>0</stdDevFactor>
+        <cumulativeCutLower>0.02</cumulativeCutLower>
+        <cumulativeCutUpper>0.98</cumulativeCutUpper>
+        <stdDevFactor>2</stdDevFactor>
       </minMaxOrigin>
       <rastershader>
-        <colorrampshader colorRampType="INTERPOLATED" classificationMode="1" minimumValue="0" clip="0" maximumValue="100" labelPrecision="0">
+        <colorrampshader colorRampType="INTERPOLATED" classificationMode="1" minimumValue="0" clip="0" maximumValue="1" labelPrecision="0">
           <colorramp type="gradient" name="[source]">
             <Option type="Map">
-              <Option type="QString" value="255,255,255,1,rgb:1,1,1,0.0039216" name="color1"/>
-              <Option type="QString" value="56,77,40,255,rgb:0.2196078,0.3019608,0.1568627,1" name="color2"/>
+              <Option type="QString" value="255,255,255,0,rgb:1,1,1,0" name="color1"/>
+              <Option type="QString" value="30,94,32,255,rgb:0.1176471,0.3686275,0.1254902,1" name="color2"/>
               <Option type="QString" value="ccw" name="direction"/>
               <Option type="QString" value="0" name="discrete"/>
               <Option type="QString" value="gradient" name="rampType"/>
               <Option type="QString" value="rgb" name="spec"/>
-              <Option type="QString" value="0.040404;84,116,61,255,rgb:0.3294118,0.454902,0.2392157,1;rgb;ccw" name="stops"/>
             </Option>
           </colorramp>
-          <item value="0" label="0" color="#ffffff" alpha="1"/>
-          <item value="4.0404" label="4" color="#54743d" alpha="255"/>
-          <item value="100" label="100" color="#384d28" alpha="255"/>
+          <item value="0" label="0" color="#ffffff" alpha="0"/>
+          <item value="1" label="&lt;1" color="#1e5e20" alpha="255"/>
           <rampLegendSettings suffix="" direction="0" orientation="2" maximumLabel="" useContinuousLegend="1" minimumLabel="" prefix="">
             <numericFormat id="basic">
               <Option type="Map">

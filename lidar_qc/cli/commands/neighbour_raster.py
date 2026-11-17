@@ -1,3 +1,4 @@
+import shutil
 from pathlib import Path
 from typing import List, Optional
 
@@ -59,11 +60,12 @@ def neighbour_raster(
             error_file = subfolder / f"{folder.stem}_errors.csv"
             write_errors_csv(errors=errors, output_file=error_file)
             logger.error(
-                f"{len(errors)} errors while creating {folder.stem} density rasters, writing errors to {error_file.name}"
+                f"{len(errors)} errors while creating {folder.stem} neighbour rasters, writing errors to {error_file.name}"
             )
-        if len([subfolder.glob("*.tif")]) == 0:
+        # Outputs keep the input file names, so match the same extensions as the input glob.
+        if not any(subfolder.glob("*.[tT][iI][fF]*")):
             logger.error(
-                f"No {folder.stem} density raster files created, skipping building vrt"
+                f"No {folder.stem} neighbour raster files created, skipping building vrt"
             )
         else:
             build_vrt(
@@ -73,4 +75,9 @@ def neighbour_raster(
                 logger_=logger,
                 called_from_cli=False,
             )
+            vrt_style_file = (
+                Path(__file__).parents[2] / "layer_styles/neighbour_raster.qml"
+            )
+            if vrt_style_file.exists():
+                shutil.copy(vrt_style_file, subfolder / "vrt")
     end_timer(start_time)

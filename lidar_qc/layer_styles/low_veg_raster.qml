@@ -25,16 +25,16 @@
         <colorrampshader colorRampType="INTERPOLATED" classificationMode="1" minimumValue="0" clip="0" maximumValue="1" labelPrecision="0">
           <colorramp type="gradient" name="[source]">
             <Option type="Map">
-              <Option type="QString" value="255,255,255,1,rgb:1,1,1,0.0039216" name="color1"/>
-              <Option type="QString" value="84,116,61,255,rgb:0.3294118,0.454902,0.2392157,1" name="color2"/>
+              <Option type="QString" value="255,255,255,0,rgb:1,1,1,0" name="color1"/>
+              <Option type="QString" value="30,94,32,255,rgb:0.1176471,0.3686275,0.1254902,1" name="color2"/>
               <Option type="QString" value="ccw" name="direction"/>
               <Option type="QString" value="0" name="discrete"/>
               <Option type="QString" value="gradient" name="rampType"/>
               <Option type="QString" value="rgb" name="spec"/>
             </Option>
           </colorramp>
-          <item value="0" label="0" color="#ffffff" alpha="1"/>
-          <item value="1" label="&lt;1" color="#54743d" alpha="255"/>
+          <item value="0" label="0" color="#ffffff" alpha="0"/>
+          <item value="1" label="&lt;1" color="#1e5e20" alpha="255"/>
           <rampLegendSettings suffix="" direction="0" orientation="2" maximumLabel="" useContinuousLegend="1" minimumLabel="" prefix="">
             <numericFormat id="basic">
               <Option type="Map">
