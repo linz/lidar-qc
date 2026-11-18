@@ -59,7 +59,7 @@ linz-lidar-qc check-dataset --input H:\lidar-dataset\Raw --output H:\lidar-datas
 
 To run the command on 1 child folder, use `--ras-folder` and/or `--pc-folder`:
 ```bash
-linz-lidar-qc check-dataset --input-dir H:\lidar-dataset\Raw --output-gpkg H:\lidar-dataset\Processed\metadata_output.gpkg --ras-folder DEM --pc-folder LAZ
+linz-lidar-qc check-dataset --input H:\lidar-dataset\Raw --output H:\lidar-dataset\Processed\metadata_output.gpkg --ras-folder DEM --pc-folder LAZ
 ```
 
 ### density-raster
@@ -80,6 +80,16 @@ To create a density raster for every available filter in one run, use the filter
 ```bash
 linz-lidar-qc density-raster --input H:\lidar-dataset\Raw\LAZ --filter all
 ```
+
+#### Colourised point clouds (RGB / RGBN)
+The `colourised` filter checks colour for point formats that hold it (PDRF 7, 8 and 10). If the point format has no colour (e.g. PDRF 6) it is skipped with a warning.
+
+It creates a 1 m raster of the mean colour of first returns and synthetic points (e.g. flattened water surfaces, which have return number 0), excluding withheld points, for comparing against the source imagery. Bands are Red, Green, Blue, plus Infrared for PDRF 8 and 10. Both 8-bit (0-255) and 16-bit (0-65535) colour is accepted, and output is always scaled to 0-255 so tiles of either scale look the same side by side. `colourised_raster.qml` styles it as true colour, and for NIR datasets `colourised_false_colour_raster.qml` styles it as false colour (NIR, Red, Green).
+```bash
+linz-lidar-qc density-raster --input H:\lidar-dataset\Raw\LAZ --filter colourised
+```
+
+`check-dataset` also reports colour per tile (`red_min` to `nir_max`, and `rgb_bit_depth` of 8 or 16) and for the dataset (RGB/NIR range, colour scale, and tiles with empty NIR). These are empty for point formats without colour.
 
 ### psid
 Creates a text file that contains a pointcloud file name and a list of the point source ID's in that file.

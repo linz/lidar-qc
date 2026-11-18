@@ -81,6 +81,15 @@ class PointCloudFileInfo(FileInfo):
             "point_source_id_max": "int",
             "gps_time_min": "float",
             "gps_time_max": "float",
+            "red_min": "int",
+            "red_max": "int",
+            "green_min": "int",
+            "green_max": "int",
+            "blue_min": "int",
+            "blue_max": "int",
+            "nir_min": "int",
+            "nir_max": "int",
+            "rgb_bit_depth": "int",
             "is_tiling_correct": "bool",
             "is_file_name_correct_format": "bool",
             "is_file_name_correct_tile": "bool",
@@ -137,6 +146,13 @@ class PointCloudFileInfo(FileInfo):
     number_of_first_returns: int | None
     number_of_last_returns: int | None
     area_m: float | None
+
+    # --- Colour fields (only present for colour PDRFs, e.g. 7, 8, 10) ---
+    point_data_red: MinMax | None = None
+    point_data_green: MinMax | None = None
+    point_data_blue: MinMax | None = None
+    # NIR is only present for PDRF 8 and 10
+    point_data_nir: MinMax | None = None
 
     # --- Classification histograms ---
     classifications: Dict[int, Classification]
@@ -253,6 +269,11 @@ class PointCloudFileInfo(FileInfo):
         data["point_data_point_source_id"] = get_minmax("PointSourceId")
         data["point_data_gps_time"] = get_minmax_float("GpsTime")
 
+        # --- Colour stats from numpy ---
+        # PDAL only creates colour dimensions when the PDRF holds them,
+        # so checking the array fields avoids hard-coding PDRF numbers.
+        data.update(cls._colour_stats(points))
+
         # --- Counts from numpy ---
         # Return number counts
         return_values, return_counts = np.unique(
@@ -286,7 +307,7 @@ class PointCloudFileInfo(FileInfo):
         if data["header_count_correct"] is False:
             warnings.append(
                 f"Header point count ({header_count}) does not match "
-                f"actual point count ({actual_count}). Consider running --repair."
+                f"actual point count ({actual_count}). Report to the supplier."
             )
 
         # --- Classification histogram ---
@@ -349,6 +370,28 @@ class PointCloudFileInfo(FileInfo):
         except ValidationError as err:
             error_fields = ", ".join([str(e["loc"][0]) for e in err.errors()])
             raise ValueError(f"Could not parse {error_fields}")
+
+    @staticmethod
+    def _colour_stats(points: np.ndarray) -> dict[str, Any]:
+        """
+        Returns min/max for each colour band present in the point array.
+        Bands that are not in the point format are returned as None.
+        """
+        names = points.dtype.names or ()
+        stats: dict[str, Any] = {}
+        for field, dim in (
+            ("point_data_red", "Red"),
+            ("point_data_green", "Green"),
+            ("point_data_blue", "Blue"),
+            ("point_data_nir", "Infrared"),
+        ):
+            if dim in names and len(points) > 0:
+                stats[field] = MinMax(
+                    min=int(points[dim].min()), max=int(points[dim].max())
+                )
+            else:
+                stats[field] = None
+        return stats
 
     @staticmethod
     def _run_pdal(file: Path) -> tuple[dict, list[dict], np.ndarray]:
@@ -418,30 +461,6 @@ class PointCloudFileInfo(FileInfo):
             logger.warning(
                 f"pdal info failed for {file.name}, skipping info output: {e.stderr}"
             )
-
-    @staticmethod
-    def repair_file(file: Path) -> None:
-        """
-        Rewrites a LAS/LAZ file in place using `pdal translate` to correct
-        any header count mismatches. The original file is overwritten.
-
-        Args:
-            file: LAS/LAZ file to repair.
-        """
-        tmp_file = file.with_suffix(".tmp.laz")
-        try:
-            subprocess.run(
-                args=["pdal", "translate", str(file), str(tmp_file)],
-                capture_output=True,
-                encoding="utf-8",
-                check=True,
-            )
-            tmp_file.replace(file)
-            logger.info(f"Repaired {file.name}")
-        except subprocess.CalledProcessError as e:
-            if tmp_file.exists():
-                tmp_file.unlink()
-            raise RuntimeError(f"pdal translate failed for {file.name}: {e.stderr}")
 
     def version(self) -> str | None:
         if self.header_major_version and self.header_minor_version:
@@ -599,6 +618,23 @@ class PointCloudFileInfo(FileInfo):
             return self.number_of_last_returns / self.area_m
         return None
 
+    def has_rgb(self) -> bool:
+        return self.point_data_red is not None
+
+    def has_nir(self) -> bool:
+        return self.point_data_nir is not None
+
+    def get_rgb_bit_depth(self) -> int | None:
+        """
+        Returns 8 or 16 depending on the scale the RGB values were written in.
+        The LAS spec says 16-bit (0-65535), but 8-bit (0-255) values are
+        common. A tile whose RGB max is at or below 255 is treated as 8-bit.
+        """
+        bands = [self.point_data_red, self.point_data_green, self.point_data_blue]
+        if not all(bands):
+            return None
+        return 8 if max(b.max for b in bands) <= 255 else 16  # type: ignore
+
     def feature(self) -> dict:
         return {
             "properties": {
@@ -645,6 +681,19 @@ class PointCloudFileInfo(FileInfo):
                 "gps_time_max": self.point_data_gps_time.max
                 if self.point_data_gps_time
                 else None,
+                "red_min": self.point_data_red.min if self.point_data_red else None,
+                "red_max": self.point_data_red.max if self.point_data_red else None,
+                "green_min": self.point_data_green.min
+                if self.point_data_green
+                else None,
+                "green_max": self.point_data_green.max
+                if self.point_data_green
+                else None,
+                "blue_min": self.point_data_blue.min if self.point_data_blue else None,
+                "blue_max": self.point_data_blue.max if self.point_data_blue else None,
+                "nir_min": self.point_data_nir.min if self.point_data_nir else None,
+                "nir_max": self.point_data_nir.max if self.point_data_nir else None,
+                "rgb_bit_depth": self.get_rgb_bit_depth(),
                 "is_tiling_correct": self.is_tiled_correctly(),
                 "is_file_name_correct_format": self.is_file_name_correct_format(),
                 "is_file_name_correct_tile": self.is_file_name_correct_tile(),

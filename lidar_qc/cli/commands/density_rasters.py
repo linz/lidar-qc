@@ -8,8 +8,12 @@ from lidar_qc.cli.commands.build_vrt import build_vrt
 from lidar_qc.cli.timer import end_timer, start_timer
 from lidar_qc.cli.validations import validate_filter_args
 from lidar_qc.density_filters import (
+    COLOUR_PDRFS,
+    DENSITY_FILTER_COLOUR,
+    NIR_PDRFS,
     DensityFilter,
     create_all_rasters_per_tile_pdal,
+    read_pdrf,
 )
 from lidar_qc.log import configure_logging
 from lidar_qc.parallel import run_in_parallel, write_errors_csv
@@ -59,6 +63,27 @@ def density_raster(
 
     # Resolve which filters are DensityFilter enums (validate_filter_args returns strings)
     active_filters: list[DensityFilter] = [DensityFilter(f) for f in density_filter]
+
+    # Colour filters only work on point formats with RGB. Check one tile's header
+    # so a dataset without colour skips them once, rather than per tile every run.
+    colour_filters = [f for f in active_filters if f in DENSITY_FILTER_COLOUR]
+    dataset_has_nir = False
+    if colour_filters and all_input_files:
+        pdrf = read_pdrf(all_input_files[0])
+        dataset_has_nir = pdrf in NIR_PDRFS
+        if pdrf not in COLOUR_PDRFS:
+            logger.warning(
+                f"Point data format {pdrf} has no RGB, skipping "
+                f"{[f.value for f in colour_filters]}"
+            )
+            active_filters = [f for f in active_filters if f not in colour_filters]
+            for f in colour_filters:
+                folder = output_dirs.pop(f.value)
+                if not any(folder.iterdir()):
+                    folder.rmdir()
+            if not active_filters:
+                end_timer(start_time)
+                return
 
     # Skip tiles where all outputs already exist
     files_to_process: list[Path] = []
@@ -123,5 +148,14 @@ def density_raster(
         )
         if vrt_style_file.exists():
             shutil.copy(vrt_style_file, subfolder / "vrt")
+        if filter_ == DensityFilter.colourised:
+            # Per-band rasters are deleted after merging, leaving tmp empty.
+            shutil.rmtree(subfolder / "tmp", ignore_errors=True)
+            if dataset_has_nir:
+                # Same raster, styled as false colour (NIR, Red, Green).
+                shutil.copy(
+                    vrt_style_file.with_name("colourised_false_colour_raster.qml"),
+                    subfolder / "vrt",
+                )
 
     end_timer(start_time)
