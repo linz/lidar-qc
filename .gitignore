@@ -105,3 +105,5 @@ venv.bak/
 
 # vscode
 .vscode
+# Generated test point clouds and rasters
+test_data/

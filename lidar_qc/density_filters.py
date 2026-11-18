@@ -2,7 +2,9 @@ import json
 from enum import Enum
 from pathlib import Path
 
+import numpy as np
 import pdal
+import rasterio
 
 from lidar_qc.log import get_logger
 
@@ -43,6 +45,15 @@ class DensityFilter(str, Enum):
     high_veg_no_flag = "high_veg_no_flag"
     bridge_no_flag = "bridge_no_flag"
     water_no_flag = "water_no_flag"
+    colourised = "colourised"
+
+
+# Filters that need colour in the point format (PDRF 2, 3, 5, 7, 8 or 10).
+DENSITY_FILTER_COLOUR: list[DensityFilter] = [
+    DensityFilter.colourised,
+]
+COLOUR_PDRFS = {2, 3, 5, 7, 8, 10}
+NIR_PDRFS = {8, 10}
 
 
 DENSITY_FILTER_COMMON: list[DensityFilter] = [
@@ -104,6 +115,10 @@ DENSITY_FILTER_WHERE_STATEMENTS: dict[DensityFilter, str | None] = {
     DensityFilter.overlap: "(Overlap == 1)",
     DensityFilter.noise_with_withheld: "((Classification == 7 || Classification == 18) && Withheld == 1)",
     DensityFilter.intensity: None,
+    # First returns are closest to what the camera saw (the top surface).
+    # Synthetic points (e.g. flattened water surfaces) are written with
+    # ReturnNumber 0, so they are added explicitly or water tiles come out empty.
+    DensityFilter.colourised: "((ReturnNumber == 1 || Synthetic == 1) && Withheld == 0)",
     # Pulse: first returns only, excluding status-flagged points.
     # Mirrors lasgrid: -first_only -drop_withheld -drop_synthetic -drop_keypoint
     # Overlap points are intentionally included to match ANPD aggregate behaviour.
@@ -147,6 +162,19 @@ def create_all_rasters_per_tile_pdal(
     bounds = (
         f"([{header['minx']}, {header['maxx']}], [{header['miny']}, {header['maxy']}])"
     )
+    pdrf = header.get("dataformat_id")
+
+    # Colour filters are skipped for tiles whose point format has no colour.
+    if pdrf not in COLOUR_PDRFS:
+        skipped = [f for f in filters if f in DENSITY_FILTER_COLOUR]
+        if skipped:
+            logger.warning(
+                f"{input_file.name} is PDRF {pdrf} with no colour, "
+                f"skipping {[f.value for f in skipped]}"
+            )
+        filters = [f for f in filters if f not in DENSITY_FILTER_COLOUR]
+        if not filters:
+            return
 
     pipeline_spec: list[dict] = [
         {
@@ -154,9 +182,36 @@ def create_all_rasters_per_tile_pdal(
             "filename": str(input_file),
         }
     ]
+    colour_band_files: list[Path] = []
 
     for filter_ in filters:
         output_file = output_dirs[filter_.value] / f"{input_file.stem}.tif"
+
+        if filter_ == DensityFilter.colourised:
+            # One mean raster per band, merged into a single multi-band tif after.
+            bands = ["Red", "Green", "Blue"]
+            if pdrf in NIR_PDRFS:
+                bands.append("Infrared")
+            tmp_dir = output_dirs[filter_.value] / "tmp"
+            tmp_dir.mkdir(exist_ok=True)
+            for band in bands:
+                band_file = tmp_dir / f"{input_file.stem}_{band}.tif"
+                colour_band_files.append(band_file)
+                pipeline_spec.append(
+                    {
+                        "type": "writers.gdal",
+                        "resolution": "1",
+                        "binmode": True,
+                        "data_type": "Float32",
+                        "nodata": "-9999",
+                        "dimension": band,
+                        "output_type": "mean",
+                        "filename": str(band_file),
+                        "bounds": bounds,
+                        "where": DENSITY_FILTER_WHERE_STATEMENTS[filter_],
+                    }
+                )
+            continue
 
         if filter_ == DensityFilter.intensity:
             dimension = "Intensity"
@@ -188,6 +243,66 @@ def create_all_rasters_per_tile_pdal(
 
     pipeline = pdal.Pipeline(json.dumps(pipeline_spec))
     pipeline.execute()
+
+    if colour_band_files:
+        merge_colour_bands(
+            band_files=colour_band_files,
+            output_file=output_dirs[DensityFilter.colourised.value]
+            / f"{input_file.stem}.tif",
+        )
+
+
+def read_pdrf(input_file: Path) -> int | None:
+    """
+    Returns the point data record format from the file header, without reading points.
+    """
+    pipeline = pdal.Pipeline(
+        json.dumps([{"type": "readers.las", "filename": str(input_file), "count": 0}])
+    )
+    pipeline.execute()
+    return pipeline.metadata["metadata"]["readers.las"].get("dataformat_id")
+
+
+COLOUR_NODATA = -1
+
+
+def merge_colour_bands(band_files: list[Path], output_file: Path) -> None:
+    """
+    Merges the per-band mean rasters into one multi-band tif (R, G, B and NIR
+    when present), then deletes the per-band files.
+    Colour is normalised to 0-255 so 8-bit and 16-bit tiles look the same
+    side by side and share one QML style. A tile is treated as 16-bit when any
+    RGB cell mean is above 255, as an 8-bit tile can never go above 255.
+    """
+    arrays = []
+    for band_file in band_files:
+        with rasterio.open(band_file) as src:
+            arrays.append(src.read(1))
+            # Every band uses the same points, so they share one valid mask.
+            if len(arrays) == 1:
+                profile = src.profile
+                valid_mask = src.read_masks(1) > 0
+    stack = np.stack(arrays)
+
+    rgb_max = float(stack[:3, valid_mask].max()) if valid_mask.any() else 0.0
+    if rgb_max > 255:
+        stack = stack / 257  # 65535 / 255
+    out = np.where(valid_mask, np.clip(np.rint(stack), 0, 255), COLOUR_NODATA)
+
+    profile.update(
+        driver="GTiff",
+        count=len(band_files),
+        dtype="int16",
+        nodata=COLOUR_NODATA,
+        compress="lzw",
+    )
+    with rasterio.open(output_file, "w", **profile) as dst:
+        dst.write(out.astype(np.int16))
+        for i, band_file in enumerate(band_files, start=1):
+            dst.set_band_description(i, band_file.stem.rsplit("_", 1)[-1])
+
+    for band_file in band_files:
+        band_file.unlink(missing_ok=True)
 
 
 def remove_gross_files(folder: Path) -> None:

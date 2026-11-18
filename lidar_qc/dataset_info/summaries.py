@@ -121,6 +121,86 @@ def filter_zero(a, b):
         return a / b
 
 
+def summarise_colour(
+    file_infos: List["PointCloudFileInfo"],
+) -> List[Tuple[str, str, str]]:
+    """
+    Summarises RGB and NIR values for the dataset.
+    Point formats without colour (e.g. PDRF 6) report "Not present"
+    rather than failing, as colour is only required for some datasets.
+    """
+
+    def presence(flags: List[bool]) -> str:
+        if all(flags):
+            return "All tiles"
+        if any(flags):
+            return f"Some tiles ({sum(flags)} of {len(flags)})"
+        return "No tiles"
+
+    def band_range(attr: str) -> str | None:
+        values = [getattr(f, attr) for f in file_infos if getattr(f, attr)]
+        if not values:
+            return None
+        return f"{min(v.min for v in values)} - {max(v.max for v in values)}"
+
+    rgb_tiles = [f for f in file_infos if f.has_rgb()]
+    rows: List[Tuple[str, str, str]] = [
+        (
+            "Point data formats in dataset",
+            "Same for all tiles",
+            str(sorted({f.header_point_data_format for f in file_infos})),
+        ),
+        (
+            "Does the point format include RGB?",
+            "PDRF 7, 8 or 10",
+            presence([f.has_rgb() for f in file_infos]),
+        ),
+        (
+            "Does the point format include NIR?",
+            "PDRF 8 or 10",
+            presence([f.has_nir() for f in file_infos]),
+        ),
+    ]
+    if not rgb_tiles:
+        return rows
+
+    red, green, blue = (
+        band_range("point_data_red"),
+        band_range("point_data_green"),
+        band_range("point_data_blue"),
+    )
+    rows.append(("What is the RGB range?", "", f"R: {red}, G: {green}, B: {blue}"))
+    if nir := band_range("point_data_nir"):
+        rows.append(("What is the NIR range?", "", nir))
+
+    # Both 8-bit and 16-bit colour are accepted, but every tile should use
+    # the same scale, or the colour will not match across tile edges.
+    depths = [f.get_rgb_bit_depth() for f in rgb_tiles]
+    eight, sixteen = depths.count(8), depths.count(16)
+    if eight and sixteen:
+        bit_depth = f"Mixed ({eight} tiles 8-bit, {sixteen} tiles 16-bit)"
+    else:
+        bit_depth = "8-bit (0-255)" if eight else "16-bit (0-65535)"
+    rows.append(
+        (
+            "What scale is RGB stored in?",
+            "Same for all tiles, LAS spec is 16-bit. See rgb_bit_depth per tile",
+            bit_depth,
+        )
+    )
+    nir_tiles = [f for f in rgb_tiles if f.point_data_nir]
+    nir_empty = [f for f in nir_tiles if f.point_data_nir.max == 0]  # type: ignore
+    if nir_tiles:
+        rows.append(
+            (
+                "Are there tiles with empty NIR?",
+                "NIR all 0",
+                f"Yes ({len(nir_empty)} tiles)" if nir_empty else "No",
+            )
+        )
+    return rows
+
+
 def summarise_point_cloud_product(
     file_infos: List["PointCloudFileInfo"],
 ) -> List[Tuple[str, str, str]]:
@@ -223,6 +303,7 @@ def summarise_point_cloud_product(
             "",
             f"{min(check_data['min_gps'])} - {max(check_data['max_gps'])}",
         ),
+        *summarise_colour(file_infos),
         (
             "Dataset classification IDs",
             "1,2,3,4,5,6,7,9,18",

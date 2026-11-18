@@ -8,7 +8,6 @@ from lidar_qc.cli.commands.build_vrt import build_vrt
 from lidar_qc.cli.timer import end_timer, start_timer
 from lidar_qc.cli.validations import find_data_subdirs, validate_output_gpkg
 from lidar_qc.dataset_info.output import save_to_gpkg
-from lidar_qc.dataset_info.point_cloud_file_info import PointCloudFileInfo
 from lidar_qc.dataset_info.summaries import summarise_supplied_tile_index
 from lidar_qc.log import configure_logging
 from lidar_qc.parallel import run_in_parallel, write_errors_csv
@@ -75,14 +74,6 @@ def check_dataset(
         False,
         help="Build Virtual Rasters for raster products.",
     ),
-    repair: bool = typer.Option(
-        False,
-        "--repair",
-        help=(
-            "Rewrite all point cloud files in place using pdal translate "
-            "before processing, correcting any header count mismatches."
-        ),
-    ),
     pdal_info: bool = typer.Option(
         False,
         "--pdal-info",
@@ -126,25 +117,6 @@ def check_dataset(
                 f"No files matching {cls.glob_pattern} found in {raw_data_dir}"
             )
             continue
-
-        # --- Repair pass (point cloud only, opt-in) ---
-        if repair and is_point_cloud_dir(raw_data_dir.name):
-            logger.info(
-                f"Running pdal translate repair on {len(files)} files "
-                f"in {raw_data_dir.name}..."
-            )
-            repair_errors = []
-            for file in files:
-                try:
-                    PointCloudFileInfo.repair_file(file)
-                except RuntimeError as e:
-                    logger.error(str(e))
-                    repair_errors.append(file)
-            if repair_errors:
-                logger.error(
-                    f"{len(repair_errors)} files failed repair in "
-                    f"{raw_data_dir.name}, they will still be processed."
-                )
 
         # --- Build extra_kwargs ---
         extra_kwargs: dict[str, Any] = {"supplied_tile_index_file": tile_index}

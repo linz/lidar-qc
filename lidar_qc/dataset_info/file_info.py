@@ -104,8 +104,9 @@ class FileInfo(BaseModel):
             official_tile = official_tile_index.get_tile_from_point(
                 self.bounding_box().centroid
             )
-        except ValueError:
-            logger.error(f"{self.file_name} is outside tile scheme")
+        except ValueError as err:
+            # Per-tile detail only: the result is already recorded in the geopackage.
+            logger.debug(f"{self.file_name} could not be matched to the tile scheme: {err}")
             return False
         if official_tile is None or not self.file_name:
             return False
@@ -129,10 +130,9 @@ class FileInfo(BaseModel):
             official_tile = official_tile_index.get_tile_from_point(
                 self.bounding_box().centroid
             )
-        except ValueError:
-            logger.error(
-                f"{self.file_name} is not tiled correctly - outside tile scheme"
-            )
+        except ValueError as err:
+            # Per-tile detail only: the result is already recorded in the geopackage.
+            logger.debug(f"{self.file_name} is not tiled correctly: {err}")
             official_tile = None
         if official_tile is None:
             return False
@@ -188,8 +188,8 @@ class FileInfo(BaseModel):
             official_tile = official_tile_index.get_tile_from_point(
                 self.bounding_box().centroid
             )
-        except ValueError:
-            logger.error(f"{self.file_name} is outside tile scheme")
+        except ValueError as err:
+            logger.debug(f"{self.file_name} could not be matched to the tile scheme: {err}")
 
         return official_tile
 
