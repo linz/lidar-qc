@@ -29,7 +29,7 @@ The application is called using linz-lidar-qc. Use `--help` for more information
     <img src="./img/app.png">
 </p>
 
-There are currently 5 commands on the application. More commands will be added as development continues. 
+There are currently several commands on the application. More commands will be added as development continues. 
 
 ### build-vrt
 Creates a virtual raster for a directory of tif files.
@@ -39,6 +39,24 @@ Basic usage:
 ```bash
 linz-lidar-qc build-vrt --input H:\lidar-dataset\Raw\DEM
 ```
+
+VRTs are written with paths relative to the VRT file (e.g. `../tile.tif`), so a dataset can be moved to another drive, machine or OS and the VRTs still open, as long as each raster folder moves together with its `vrt` subfolder.
+
+### repair-vrt
+Fixes VRTs whose source paths broke after the dataset was moved (e.g. VRTs built before relative paths were added, or built on another machine).
+Searches `--input` recursively for VRTs inside `vrt` folders and rewrites each source path to be relative to the VRT. Each source is looked for, by file name, in the VRT's own folder, then one folder up, then at its original absolute path. 
+Running repair-vrt will also change exisitng absolute paths to relative paths.
+
+```bash
+linz-lidar-qc repair-vrt --input H:\lidar-dataset\Raw --dry-run
+linz-lidar-qc repair-vrt --input H:\lidar-dataset\Raw
+```
+
+- `--dry-run` reports what would change without writing.
+- `--any-folder` also repairs VRTs outside `vrt` folders (e.g. ones made in QGIS). Use with care.
+- Sources that can't be found (renamed/deleted tifs, or tifs that weren't moved with the VRT) are left unchanged and reported as warnings.
+- `/vsi...` paths (S3, zip, curl) are never changed.
+- External overviews (`*.vrt.ovr`) are found by name, so keep them next to the VRT.
 
 ### check-dataset
 Gathers metadata information on all products of LiDAR data (raster and point clouds) and outputs information to a geopackage. 

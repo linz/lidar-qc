@@ -188,7 +188,7 @@ def validate_script_progress(input_files: list[Path], output_dir: Path, item: st
     if Path(output_dir / "vrt").exists():
         logger.info(f"vrt folder found, skipping {item} processing")
         return []
-    output_files = [f for ext in ("*.tif", "*.tiff", "*.TIF", "*.TIFF") for f in output_dir.glob(ext)]
+    output_files = sorted({f for ext in ("*.tif", "*.tiff", "*.TIF", "*.TIFF") for f in output_dir.glob(ext)})
     if item == DensityFilter.pulse.value:
         output_files: list[Path] = remove_invalid_files(files=output_files)
     folder_files_filtered: list[Path] = [f for f in input_files if f.stem not in {o_f.stem: o_f for o_f in output_files}]
