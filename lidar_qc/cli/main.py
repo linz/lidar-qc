@@ -7,6 +7,7 @@ from lidar_qc.cli.commands.difference_raster import difference_raster
 from lidar_qc.cli.commands.neighbour_raster import neighbour_raster
 from lidar_qc.cli.commands.psid import psid
 from lidar_qc.cli.commands.rename import rename
+from lidar_qc.cli.commands.repair_vrt import repair_vrt
 
 app = typer.Typer(add_completion=False, pretty_exceptions_show_locals=False)
 app.command()(check_dataset)
@@ -16,6 +17,7 @@ app.command()(density_raster)
 app.command()(neighbour_raster)
 app.command()(difference_raster)
 app.command()(rename)
+app.command()(repair_vrt)
 
 if __name__ == "__main__":
     app()
