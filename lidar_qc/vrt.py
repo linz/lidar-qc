@@ -58,8 +58,12 @@ def gdalinfo(file: Path):
     Runs GDAL tool gdalinfo in a subprocess, using the received path to the input file.
     Raises an exception if subprocess isnt successful.
     Returns the completed process string formatted as json.
+
+    -mm computes min/max without saving anything. GDAL_PAM_ENABLED=NO stops
+    GDAL writing (or reading) .aux.xml sidecar files next to the input, so QC
+    never alters a delivered dataset and reports only what is in the file itself.
     """
-    gdalinfo_args = ["gdalinfo", "-stats", "-mm", "-json", str(file)]
+    gdalinfo_args = ["gdalinfo", "-mm", "-json", str(file)]
     try:
         result = subprocess.run(
             args=gdalinfo_args,
@@ -67,6 +71,7 @@ def gdalinfo(file: Path):
             shell=False,
             check=True,
             encoding="utf-8",
+            env={**os.environ, "GDAL_PAM_ENABLED": "NO"},
         )
     except Exception as err:
         raise err

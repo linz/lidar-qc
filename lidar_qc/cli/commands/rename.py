@@ -109,7 +109,7 @@ def rename(
             raw_data_dirs.append((path, RasterFileInfo))
 
     for raw_data_dir, cls in raw_data_dirs:
-        files: list[Path] = list(raw_data_dir.glob(cls.glob_pattern))
+        files: list[Path] = cls.find_files(raw_data_dir)
 
         if write is None and limit is not None:
             files = files[:limit]
@@ -130,7 +130,7 @@ def rename(
         if file_info_errors:
             logger.error(
                 f"{len(file_info_errors)} files were unable to be parsed from "
-                f"{len(files)} files matching {cls.glob_pattern} found in {raw_data_dir}"
+                f"{len(files)} {sorted(cls.file_extensions)} files found in {raw_data_dir}"
             )
 
         if file_infos:

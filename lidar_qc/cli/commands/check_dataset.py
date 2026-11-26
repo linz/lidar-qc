@@ -111,10 +111,10 @@ def check_dataset(
     product_infos_errors = {}
 
     for raw_data_dir, cls in raw_data_dirs:
-        files: list[Path] = list(raw_data_dir.glob(cls.glob_pattern))
+        files: list[Path] = cls.find_files(raw_data_dir)
         if not files:
             logger.error(
-                f"No files matching {cls.glob_pattern} found in {raw_data_dir}"
+                f"No {sorted(cls.file_extensions)} files found in {raw_data_dir}"
             )
             continue
 

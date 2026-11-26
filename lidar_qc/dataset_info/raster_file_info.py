@@ -10,6 +10,7 @@ from lidar_qc.dataset_info.file_info import *
 from lidar_qc.dataset_info.summaries import summarise_raster_product
 from lidar_qc.index_tiles import TileIndex, TileIndexScale
 from lidar_qc.log import get_logger
+from lidar_qc.util import RASTER_EXTENSIONS
 from lidar_qc.vrt import gdalinfo
 
 logger = get_logger()
@@ -28,7 +29,7 @@ class RasterFileInfo(FileInfo):
     """
 
     file_type = "Raster"
-    glob_pattern = "*.[tT][iI][fF]*"
+    file_extensions = RASTER_EXTENSIONS
     summarise_func = summarise_raster_product
     _schema = {
         "geometry": "Polygon",
