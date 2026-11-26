@@ -60,7 +60,7 @@ class RasterFileInfo(FileInfo):
     coordinates_lower_right: XY
     coordinates_upper_right: XY
     coordinates_centre: XY
-    nodata: int | None
+    nodata: float | None
     data_type: str
     max_pixel_value: float
     min_pixel_value: float
