@@ -54,15 +54,15 @@ def density_raster(
 
     all_input_files: list[Path] = list(input_dir.glob("*.la[sz]"))
 
+    # validate_filter_args returns strings, so convert back to enums before use.
+    active_filters: list[DensityFilter] = [DensityFilter(f) for f in density_filter]
+
     # Build output dirs and create them upfront
     output_dirs: dict[str, Path] = {}
-    for filter_ in density_filter:
+    for filter_ in active_filters:
         subfolder = input_dir / f"{filter_.value}_raster"
         subfolder.mkdir(exist_ok=True)
         output_dirs[filter_.value] = subfolder
-
-    # Resolve which filters are DensityFilter enums (validate_filter_args returns strings)
-    active_filters: list[DensityFilter] = [DensityFilter(f) for f in density_filter]
 
     # Colour filters only work on point formats with RGB. Check one tile's header
     # so a dataset without colour skips them once, rather than per tile every run.
