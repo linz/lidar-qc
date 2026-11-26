@@ -10,6 +10,7 @@ from lidar_qc.cli.timer import end_timer, start_timer
 from lidar_qc.cli.validations import validate_raster_folder, validate_script_progress
 from lidar_qc.log import configure_logging
 from lidar_qc.parallel import run_in_parallel, write_errors_csv
+from lidar_qc.util import RASTER_EXTENSIONS, find_files
 
 
 def difference_raster(
@@ -49,10 +50,10 @@ def difference_raster(
     logger = configure_logging(verbose, log_file)
     start_time = start_timer()
     dem_files: dict[str, Path] = {
-        file.stem[4:]: file for file in dem_dir.glob("*.[tT][iI][fF]*")
+        file.stem[4:]: file for file in find_files(dem_dir, RASTER_EXTENSIONS)
     }
     dsm_files: dict[str, Path] = {
-        file.stem[4:]: file for file in dsm_dir.glob("*.[tT][iI][fF]*")
+        file.stem[4:]: file for file in find_files(dsm_dir, RASTER_EXTENSIONS)
     }
     files: list[tuple[Path, Path]] = []
     for basename, dem_path in dem_files.items():

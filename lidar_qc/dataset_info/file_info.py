@@ -10,6 +10,7 @@ from shapely.strtree import STRtree
 
 from lidar_qc.index_tiles import TileIndex, TileIndexScale
 from lidar_qc.log import get_logger
+from lidar_qc.util import find_files
 
 logger = get_logger()
 
@@ -55,13 +56,18 @@ class FileInfo(BaseModel):
     """
 
     file_type: ClassVar[str]
-    glob_pattern: ClassVar[str]
+    file_extensions: ClassVar[frozenset[str]]
     summarise_func: ClassVar
     _schema: ClassVar[dict]
     file_name: str | None
     file_extension: str | None
     projection: str | None
     supplied_tile_index_file: Path | None
+
+    @classmethod
+    def find_files(cls, folder: Path) -> list[Path]:
+        """Returns the files in folder that this class can parse."""
+        return find_files(folder, cls.file_extensions)
 
     def bounding_box(self) -> Polygon:  # type: ignore
         pass

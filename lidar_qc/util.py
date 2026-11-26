@@ -47,6 +47,20 @@ def rename_file(old_file_path: Path, new_file_path: Path) -> None:
         logger.error(f"Error processing file: {err}")
 
 
+RASTER_EXTENSIONS = frozenset({".tif", ".tiff"})
+
+
+def find_files(folder: Path, extensions: frozenset[str]) -> list[Path]:
+    """
+    Returns files in folder whose final extension (case-insensitive) is in extensions.
+    Matching on the final suffix skips sidecars such as .tif.aux.xml or .tif.ovr,
+    which a glob like '*.tif*' would wrongly include.
+    """
+    return sorted(
+        p for p in folder.iterdir() if p.is_file() and p.suffix.lower() in extensions
+    )
+
+
 def get_first_file_extension(dir_path: Path) -> str:
     """
     Returns the extension of the first file found in the given directory.

@@ -52,7 +52,7 @@ class PointCloudFileInfo(FileInfo):
     """
 
     file_type = "PointCloud"
-    glob_pattern = "*.la[sz]"
+    file_extensions = frozenset({".las", ".laz"})
     summarise_func = summarise_point_cloud_product
 
     _schema = {
